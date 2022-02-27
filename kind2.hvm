@@ -1,0 +1,344 @@
+// Prelude
+// =======
+
+//(If n:U32 t:A f:A) : A
+(If 1 t f) = t
+(If 0 t f) = f
+
+// String Utils
+// ============
+
+// (StrIsEmpty String) : Bool
+(StrIsEmpty StrNil)         = 1
+(StrIsEmpty (StrCons x xs)) = 0
+
+// (StrConcat a:String b:String) : String
+(StrConcat StrNil         ys) = ys
+(StrConcat (StrCons x xs) ys) = (StrCons x (StrConcat xs ys))
+
+// (StrFlatten a:(List String)) : String
+(StrFlatten Nil)         = StrNil
+(StrFlatten (Cons x xs)) = (StrConcat x (StrFlatten xs))
+
+// (StrEqual (List String) (List String)) : U32
+(StrEqual StrNil         StrNil)         = 1
+(StrEqual (StrCons x xs) (StrCons y ys)) = (& (== x y) (StrEqual xs ys))
+(StrEqual xs             ys)             = 0
+
+// Todo: improve this
+// (StrHash String) : String
+(StrHash str) = (StrHashGo str 0)
+  (StrHashGo StrNil         hash) = hash
+  (StrHashGo (StrCons x xs) hash) = (StrHashGo xs (+ (- (<< hash 5) hash) x))
+
+// Pair Utils
+// ==========
+
+(PairGet (Pair x y) fn) = (fn x y)
+
+// Maybe Utils
+// ===========
+
+(Default None x)     = x
+(Default (Some x) y) = x
+
+(ToMaybe 0 x) = None
+(ToMaybe 1 x) = (Some x)
+
+// List Utils
+// ==========
+
+(Find cond Nil)         = None
+(Find cond (Cons x xs)) = (FindGo (cond x) cond xs)
+  (FindGo None     cond xs) = (Find cond xs)
+  (FindGo (Some x) cond xs) = (Some x)
+
+// Parsing
+// =======
+
+//// Bool : Type
+//// True : Bool
+//// False : Bool
+
+//// (Not True) = False
+//// (Not False) = True
+
+//// Code : Type
+//// Code = String
+
+//// Answer : Type -> Type
+//// Answer A = Parsed Code A | Failed String
+
+//// Parser : Type -> Type
+//// Parser A = Code -> Answer A
+
+// (IsNameChar Char) : Bool
+(IsNameChar chr) =
+  let is_letter = (| (& (<= 'a' chr) (<= chr 'z')) (& (<= 'A' chr) (<= chr 'Z')))
+  let is_number = (& (<= '0' chr) (<= chr '9'))
+  let is_symbol = (& (== '_' chr) (== '.' chr))
+  (| is_letter (| is_number is_symbol))
+
+// (Bind a_parser:(Parser A) b_parser:(∀A -> (Parser B))) : (Parser B)
+(Bind a_parser b_parser) = λcode (BindGo b_parser (a_parser code))
+  (BindGo b_parser (Parsed code a_val)) = (b_parser a_val code)
+  (BindGo b_parser (Failed err))        = (Failed err)
+
+// (Done val:A) : (Parser A)
+(Done value) = λcode (Parsed code value)
+
+// (IsSpace Char) : Bool
+(IsSpace chr) = (| (== 10 chr) (== ' ' chr))
+
+// (GetName String) : (Pair code:String name:String)
+(GetName)                             = λcode (GetNameGo code)
+  (GetNameGo StrNil)                  = (Pair StrNil StrNil)
+  (GetNameGo (StrCons head tail))     = (GetName_1 (IsNameChar head) head tail)
+    (GetName_1 0 head tail)           = (Pair (StrCons head tail) StrNil)
+    (GetName_1 1 head tail)           = (GetName_2 head (GetNameGo tail))
+    (GetName_2 head (Pair code name)) = (Pair code (StrCons head name))
+
+// (PeekHere text:String) : (Parser Bool)
+(PeekHere text)                               = λcode (Peek_0 text code λx(x))
+  (Peek_0 StrNil         ys             init) = (Parsed (init ys)  True)
+  (Peek_0 (StrCons x xs) StrNil         init) = (Parsed (init Nil) False)
+  (Peek_0 (StrCons x xs) (StrCons y ys) init) = (Peek_1 (== x y) xs y ys init)
+  (Peek_1 0 xs y ys init)                     = (Parsed (init (StrCons y ys)) False)
+  (Peek_1 1 xs y ys init)                     = (Peek_0 xs ys λk (init (StrCons y k)))
+
+// TODO: simplify by calling Peek here
+// (MatchHere text:String) : (Parser Bool)
+(MatchHere text)                               = λcode (Match_0 text code λx(x))
+  (Match_0 StrNil         ys             init) = (Parsed ys True)
+  (Match_0 (StrCons x xs) StrNil         init) = (Parsed (init Nil) False)
+  (Match_0 (StrCons x xs) (StrCons y ys) init) = (Match_1 (== x y) xs y ys init)
+  (Match_1 0 xs y ys init)                     = (Parsed (init (StrCons y ys)) False)
+  (Match_1 1 xs y ys init)                     = (Match_0 xs ys λk (init (StrCons y k)))
+
+// (Match text:String) : (Parser Bool)
+(Match text) = λcode ((MatchHere text) (SkipSpaces code))
+
+// (ParseTextHere text:String) : (Parser Unit)
+(ParseTextHere text)      = (Bind (MatchHere text) λgot(ParseTextHere_0 got))
+  (ParseTextHere_0 False) = (Failed "Expected...")
+  (ParseTextHere_0 True)  = (Done Unit)
+
+// (ParseText text:String) : (Parser Unit)
+(ParseText text) = λcode ((ParseTextHere text) (SkipSpaces code))
+
+// (SkipSpaces String) : String
+(SkipSpaces (StrCons x xs)) = (SkipSpaces_0 (IsSpace x) x xs)
+  (SkipSpaces_0 0 x xs)     = (StrCons x xs)
+  (SkipSpaces_0 1 x xs)     = (SkipSpaces xs)
+
+// (ParseNameHere) : (Parser String)
+ParseNameHere                        = λcode (ParseNameHere_0 ((GetName) code))
+  (ParseNameHere_0 (Pair code name)) = (Parsed code name)
+
+// (ParseName) : (Parser String)
+ParseName = λcode ((ParseNameHere) (SkipSpaces code))
+
+// (Grammar choices:(List (Parser (Maybe A)))) : (Parser A)
+(Grammar Nil)                                     = λcode (Failed "Expected...")
+(Grammar (Cons choice choices))                   = λcode (Grammar_0 (choice code) choices)
+  (Grammar_0 (Failed err)                choices) = (Failed err)
+  (Grammar_0 (Parsed code None)          choices) = ((Grammar choices) code)
+  (Grammar_0 (Parsed code (Some result)) choices) = (Parsed code result)
+
+// Note: unlike Rust's version, this won't rollback
+// (Guard head:(Parser Bool) body:(Parser A)) : (Parser (Maybe A))
+(Guard head body) = λcode (Guard_0 (head code) body)
+  (Guard_0 (Failed err)          body) = (Failed err)
+  (Guard_0 (Parsed code False)   body) = (Parsed code None)
+  (Guard_0 (Parsed code True)    body) = ((Bind body λgot(Done (Some got))) code)
+
+// (ParseLet) : (Parser (Maybe Term))
+(ParseLet) = (Guard (Match "let ")
+  (Bind ParseName λname
+  (Bind (ParseText "=") λx
+  (Bind ParseTerm     λexpr
+  (Bind ParseTerm     λbody
+  (Done (Let name expr body)))))))
+
+// (ParseDup) : (Parser (Maybe Term))
+(ParseDup) = (Guard (Match "dup ")
+  (Bind ParseName       λnam0
+  (Bind ParseName       λnam1
+  (Bind (ParseText "=") λx
+  (Bind ParseTerm       λexpr
+  (Bind ParseTerm       λbody
+  (Done (Dup nam0 nam1 expr body))))))))
+
+// (ParseCtr) : (Parser (Maybe Term))
+(ParseCtr) =
+  (Guard (Match "[")
+    (Bind ParseName    λctor
+    (Bind ParseCtrArgs λargs
+    (Done (Ctr ctor args)))))
+  (ParseCtrArgs) =
+    (Bind (Match "]") λdone
+    (ParseCtrArgs_0 done))
+  (ParseCtrArgs_0 True) =
+    (Done Nil)
+  (ParseCtrArgs_0 False) =
+    (Bind ParseTerm    λhead
+    (Bind ParseCtrArgs λtail
+    (Done (Cons head tail))))
+
+// (ParseLam) : (Parser (Maybe Term))
+(ParseLam) = (Guard (Match "λ")
+  (Bind ParseNameHere λname
+  (Bind ParseTerm     λbody
+  (Done (Lam name body)))))
+
+// (ParseApp) : (Parser (Maybe Term)) 
+(ParseApp) = (Guard (Match "(")
+  (Bind ParseTerm       λfunc
+  (Bind ParseTerm       λargm
+  (Bind (ParseText ")") λx
+  (Done (App func argm))))))
+
+// (ParseVar) : (Parser (Maybe Term))
+(ParseVar) = (Bind ParseName λname (ParseVar_0 name))
+  (ParseVar_0 StrNil        ) = (Done None)
+  (ParseVar_0 (StrCons x xs)) = (Done (Some (Var (StrCons x xs))))
+
+// (ParseTerm) : (Parser Term)
+(ParseTerm) = (Grammar [
+  ParseLet,
+  ParseDup,
+  ParseCtr,
+  ParseLam,
+  ParseApp,
+  ParseVar,
+])
+
+// (Read code) : Term
+(Read code) = (Read_0 ((ParseTerm) code))
+  (Read_0 (Parsed code term)) = term
+
+// Stringification
+// ===============
+
+// (Show term:Term) : String
+(Show term) = ((ShowGo term) "")
+  (ShowGo (Ctr ctor args)) =
+    λx((ShowStr "[")
+      ((ShowStr ctor)
+      ((ShowArgs args)
+      ((ShowStr "]")
+      x))))
+  (ShowGo (Let name expr body)) =
+    λx((ShowStr "let ")
+      ((ShowStr name)
+      ((ShowStr " = ")
+      ((ShowGo expr)
+      ((ShowStr "; ")
+      ((ShowGo body)
+      x))))))
+  (ShowGo (Dup nam0 nam1 expr body)) =
+    λx((ShowStr "dup ")
+      ((ShowStr nam0)
+      ((ShowStr nam1)
+      ((ShowStr " = ")
+      ((ShowGo expr)
+      ((ShowStr "; ")
+      ((ShowGo body)
+      x)))))))
+  (ShowGo (Lam name body)) =
+    λx((ShowStr "λ")
+      ((ShowStr name)
+      ((ShowStr " ")
+      ((ShowGo body)
+      x))))
+  (ShowGo (App func argm)) =
+    λx((ShowStr "(")
+      ((ShowGo func)
+      ((ShowStr " ")
+      ((ShowGo argm)
+      ((ShowStr ")")
+      x)))))
+  (ShowGo (Var name)) =
+    λx((ShowStr name)
+      x)
+  (ShowStr xs) =
+    λx(StrConcat xs x)
+  (ShowArgs Nil) = λx x
+  (ShowArgs (Cons head tail)) =
+    λx((ShowStr " ")
+      ((ShowGo head)
+      ((ShowArgs tail)
+      x)))
+
+// Reduction
+// =========
+
+(High term) = (PairGet (HighGo term Nil) λx λy y)
+  (HighGo (Var name) vars) = (HighFind name vars)
+    (HighFind name Nil)                        = (Pair Nil (Var "?"))
+    (HighFind name (Cons (Pair nik val) vars)) = (HighTest (StrEqual name nik) name nik val vars)
+      (HighTest 1 name nik val vars)           = (Pair vars val)
+      (HighTest 0 name nik val vars)           = (PairGet (HighFind name vars) λvars λgot (Pair (Cons (Pair nik val) vars) got))
+  (HighGo (Ctr ctor args) vars) =
+    (PairGet (HighGoArgs args vars) λvars λargs
+      (Pair vars (Ctr ctor args)))
+    (HighGoArgs Nil vars) =
+      (Pair vars Nil)
+    (HighGoArgs (Cons head tail) vars) =
+      (PairGet (HighGo head vars) λvars λhead
+      (PairGet (HighGoArgs tail vars) λvars λtail
+      (Pair vars (Cons head tail))))
+  (HighGo (Let name expr body) vars) =
+    (PairGet (HighGo expr vars)                       λvars λexpr
+    (PairGet (HighGo body (Cons (Pair name $x) vars)) λvars λbody
+    (Pair vars (Let name expr λ$x body))))
+  (HighGo (Dup nam0 nam1 expr body) vars) =
+    (PairGet (HighGo expr vars) λvars λexpr
+    (PairGet (HighGo body (Cons (Pair nam1 $y) (Cons (Pair nam0 $x) vars))) λvars λbody
+    (Pair vars (Dup nam0 nam1 expr λ$x λ$y body))))
+  (HighGo (App func argm) vars) =
+    (PairGet (HighGo func vars) λvars λfunc
+    (PairGet (HighGo argm vars) λvars λargm
+    (Pair vars (App func argm))))
+  (HighGo (Lam name body) vars) =
+    (PairGet (HighGo body (Cons (Pair name $x) vars)) λvars λbody
+    (Pair vars (Lam name λ$x body)))
+
+(Reduce (Var name))                = (Var name)
+(Reduce (Ctr ctor args))           = (Ctr ctor args)
+(Reduce (Let name expr body))      = (Reduce (body expr))
+(Reduce (Lam name body))           = (Lam name body)
+(Reduce (App func argm))           = (ReduceApp (Reduce func) argm)
+  (ReduceApp (Lam name body) argm) = (Reduce (body argm))
+  (ReduceApp func argm)            = (App func (Reduce argm))
+
+(Norm term)                     = (NormGo (Reduce term))
+  (NormGo (Var name))           = (Var name)
+  (NormGo (Ctr ctor args))      = (Ctr ctor (NormGoArgs args))
+    (NormGoArgs Nil)            = Nil
+    (NormGoArgs (Cons x xs))    = (Cons (NormGo x) (NormGoArgs xs))
+  (NormGo (Lam name body))      = (Lam name (Norm (body (Var name))))
+  (NormGo (Let name expr body)) = (Let name (Norm expr) (body (Var name)))
+  (NormGo (App func argm))      = (App (Norm func) (Norm argm))
+
+(Main n) =
+  //let id   = (Lam "x" λx x)
+  //let high = (App (App id id) (App id id))
+
+  let code = "[Foo λx x λx x]"
+  let term = (Read code)
+  //let term = (High term)
+  //let term = (Norm term)
+  (Show term)
+
+////(Lam (StrCons 120 (StrNil))
+////(Lam (StrCons 121 (StrNil))
+////(App (Var (StrCons 120 (StrNil)))
+////(App
+  ////{
+    ////(NormalGo (Reduce (Reduce (Reduce _))))
+    ////(Var (StrCons 120 (StrNil)))
+  ////}
+  ////(App (Var (StrCons 120 (StrNil)))
+  ////(App (Var (StrCons 120 (StrNil)))
+       ////(Var (StrCons 121 (StrNil)))))))))

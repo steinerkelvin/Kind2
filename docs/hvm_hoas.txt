@@ -1,0 +1,82 @@
+HVM has a certain "cloning budget" which limits the set of admissible terms. The
+problem is: how can we ensure that every native term that HVM reduces correctly,
+will also be reduced correctly under NbE? For example, HVM accepts `(λf λx (f (f
+x)) λf λx (f (f x)))`, but it rejects `(λx(x x) λf λx (f (f x)))`. How can we
+build a NbE that reduces the same class of terms? To do that, we must avoid
+unecessary clones. So, for example, the following code:
+
+    (ToHOAS (App func argm) vars) = (App (ToHOAS func vars) (ToHOAS argm vars))
+
+Should be avoided, because it will clone the "vars" context once for each `App`
+node, which will generate tons of phantom dup nodes on the resulting high-order
+term. To solve that, we must avoid cloning "vars" by passing it down, consuming
+the found variables, and returning the leftovers, like this:
+
+    (ToHOAS (App func argm) vars) =
+      (PairGet (ToHOAS func vars) λvars λfunc
+      (PairGet (ToHOAS argm vars) λvars λargm
+      (Pair vars (App func argm))))
+
+Using a monadic block here would probably make this code more palatable.
+Regardless, it successfully avoids cloning "vars". But it raises another
+problem: what about the Lam case? We could write it like this:
+
+    (ToHOAS (Lam name body) vars) =
+      (Lam λx (ToHOAS body (Cons (Pair name x) vars)))
+
+But this is obviously wrong, since we're returning a HTerm, not a pair, and the
+body of the lambda is a pair, instead of a HTerm. No matter what you do, there
+is no way to write the Lam case, because **it is impossible to write a ToHOAS
+function in a conventional, λ-calculus based language, with a linear vars
+context.** Luckily, the HVM has a nice feature that solves this impossibility:
+scopeless variables. They can be written as `$name`, and they can appear outside
+of a lambda's body. This allows us to write it as:
+
+    (ToHOAS (Lam name body) vars) =
+      (PairGet (ToHOAS body (Cons (Pair name $x) vars)) λvars λbody
+      (Pair vars (Lam λ$x body)))
+
+Notice that `$x` occurs outside of the `Lam` body. This is fine, and it will
+allow its bound variable to be consed to the vars context, as it must. What
+about the `Var` case, though? Naively, it will simply lookup a term on the
+context, and return it:
+
+    (ToHOAS (Var name) vars) =
+      (Find name vars λvalue
+      (Pair vars value))
+
+Can you spot the issue? Once again, the `vars` context is cloned, so it isn't
+linear. We can do better, though. We can make the `find` function return the
+found variable, and a copy of the context. Like this:
+
+    (HighFind name (Cons (Pair var val) vars))
+    | (StrEqual name var) = (Pair (Cons (Pair var val) vars) val)
+    | otherwise           = ... recurse ...
+
+Notice how this avoids cloning the `vars` context. But it still clones `val`,
+i.e., the bound variable. This is a problem, because it means a "dup" node will
+be inserted, even if the term is linear, like `λx(x)`. The only way to solve
+that is to avoid cloning `val`:
+
+    (HighFind name (Cons (Pair var val) vars))
+    | (StrEqual name var) = (Pair vars val)
+    | otherwise           = ... recurse ...
+
+But this will cause the variable to be consumed out of the `vars` context, so,
+if it is used more than once, it will be unbound. In other words, it would be
+impossible to convert a term like `λf λx (f (f x))` to HOAS. There is a solution
+to that, though. When extending the vars context, instead of adding a single
+occurrence, we first count how many times the bound variable is used, and extend
+the context with N copies of it. Like this:
+
+    (ToHOAS (Lam name body) vars) =
+      let uses = (Count vars body)
+      let vars = (Repeat uses λxs(Cons $x xs) vars)
+      (PairGet (ToHOAS body vars) λvars λbody
+      (Pair vars (Lam λ$x body)))
+
+This completes the solution. Once we do that, we are able to convert low-order
+terms to high-order terms in an optimal evaluator like HVM, with the added
+benefit that any HVM-admissible term will also be admissible by the HOAS
+evaluator. This fact is still an hypothesis, as I do not have a proof of that.
+It also seems like the complexity remains the same, but I'm not sure.

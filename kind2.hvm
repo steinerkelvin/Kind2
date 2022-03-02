@@ -539,5 +539,6 @@ Test2 = (Test "
   main
 ")
 
-(Main n) =
-  Test2
+// (Main) = Test2
+
+(Main in) = (Test in)

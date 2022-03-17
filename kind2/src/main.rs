@@ -5,7 +5,7 @@ mod vm;
 
 use cli::{Parser, Cli};
 
-const KIND2_HVM_CODE: &str = include_str!("../kind2.hvm");
+const KIND2_HVM_CODE: &str = include_str!("../../kind2.hvm");
 
 fn main() {
   match run() {
@@ -81,7 +81,7 @@ fn do_the_thing(kind2_code: &str, input_code: &str) -> Result<(), String> {
     Err(..) => rd::as_code(&worker, &book, main_pos),
   };
 
-  println!("Result:\n{}", result);
+  println!("{}", result);
 
   Ok(())
 }

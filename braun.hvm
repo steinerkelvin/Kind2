@@ -1,0 +1,40 @@
+// (Set u0:U32 u1:U32 Braun a): Braun
+// preconditions:
+// #TODO
+// - u0 != 0
+
+// push
+(Braun.push.go 1 is_odd t v) = (Braun.tie Braun.tip v Braun.tip)
+(Braun.push.go n 0 (Braun.tie l x r) v) =
+  (Braun.tie (Braun.push.go (>> n 1) (& (>> n 1) 1) l v) x r)
+(Braun.push.go n 1 (Braun.tie l x r) v) =
+  (Braun.tie l x (Braun.push.go (>> n 1) (& (>> n 1) 1) r v))
+(Braun.push n t v) = (Braun.push.go n (& n 1) t v)
+
+// pop
+(Braun.pop.go 1 is_odd t) = (Braun.tip)
+(Braun.pop.go n 0 (Braun.tie l x r)) =
+  (Braun.tie (Braun.pop.go (>> n 1) (& (>> n 1) 1) l) x r)
+(Braun.pop.go n 1 (Braun.tie l x r)) =
+  (Braun.tie l x (Braun.pop.go (>> n 1) (& (>> n 1) 1) r))
+
+(Braun.get.go 1 is_odd (Braun.tie l x r)) = x
+(Braun.get.go idx 0 (Braun.tie l x r)) =
+  (Braun.get.go (>> idx 1) (& (>> idx 1) 1) l)
+(Braun.get.go idx 1 (Braun.tie l x r)) =
+  (Braun.get.go (>> idx 1) (& (>> idx 1) 1) r)
+
+// main interface
+(Arr.empty) = (Arr.new 0 Braun.tip)
+(Arr.push (Arr.new n t) v) = (Arr.new (+ n 1) (Braun.push.go (+ n 1) (& (+ n 1) 1) t v))
+(Arr.pop (Arr.new n t)) = (Arr.new (- n 1) (Braun.pop.go (+ n 1) (& (+ n 1) 1) t))
+(Arr.at idx (Arr.new n t)) = (Braun.get.go (+ idx 1) (& (+ idx 1) 1) t)
+
+// Tests
+(Aux lim i 0 tree) =
+  let j = (+ 1 i)
+  (Aux lim j (< lim j) (Arr.push tree i))
+(Aux lim i 1 tree) = tree
+
+(Main m n) = 
+  (Arr.at m (Aux n 0 0 (Arr.empty)))

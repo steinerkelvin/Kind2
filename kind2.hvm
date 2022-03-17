@@ -1,15 +1,41 @@
+// #############################################################################
+// # Prelude                                                                   #
+// #############################################################################
+
+
+
 // U32
 // ===
 
 // (If U32 a a) : a
-(If 0 t f) = f
-(If 1 t f) = t
+(IsOne 0) = False
+(IsOne 1) = True
+
+
+
+// Bool
+// ====
+
+(If False t f) = f
+(If True  t f) = t
+
+
 
 // Pair
 // ====
 
 // (PairGet (Pair a b) (∀a ∀b c)) : c
 (PairGet (Pair x y) fn) = (fn x y)
+
+
+
+// Pair
+// ====
+
+// (TripleGet (Triple a b c) (∀a ∀b λc d)) : d
+(TripleGet (Triple x y z) fn) = (fn x y z)
+
+
 
 // Maybe
 // =====
@@ -21,6 +47,16 @@
 (ToMaybe 0 x) = None
 (ToMaybe 1 x) = (Some x)
 
+// (Perhaps (Maybe a) (∀a (Maybe b))) : (Maybe b)
+(Perhaps None     b) = None
+(Perhaps (Some a) b) = (b a)
+
+// (MaybeMap (Maybe a) (∀a b)) : (Maybe b)
+(MaybeMap (Some a) f) = (Some (f a))
+(MaybeMap None     f) = None
+
+
+
 // List
 // ====
 
@@ -30,21 +66,39 @@
   (FindGo None     cond xs) = (Find cond xs)
   (FindGo (Some x) cond xs) = (Some x)
 
+// (ListMap (List a) (∀a b)) : (List b)
+(ListMap Nil         f) = Nil
+(ListMap (Cons x xs) f) = (Cons (f x) (ListMap xs f))
+
+// Concatenates two lists
+// (Concat a:(List a) b:(List a)) : (List a)
+(Concat Nil         ys) = ys
+(Concat (Cons x xs) ys) = (Cons x (Concat xs ys))
+
+
 // String
 // ======
 
-// (StrIsEmpty String) : Bool
-(StrIsEmpty StrNil)         = 1
-(StrIsEmpty (StrCons x xs)) = 0
+// The new line string: "\n"
+// NewLine : String
+NewLine = (StrCons 10 StrNil)
 
+// Returns true if a string is empty
+// (StrIsEmpty String) : Bool
+(StrIsEmpty StrNil)         = True
+(StrIsEmpty (StrCons x xs)) = False
+
+// Concatenates two strings
 // (StrConcat a:String b:String) : String
 (StrConcat StrNil         ys) = ys
 (StrConcat (StrCons x xs) ys) = (StrCons x (StrConcat xs ys))
 
+// Concatenates a list of strings
 // (StrFlatten a:(List String)) : String
 (StrFlatten Nil)         = StrNil
 (StrFlatten (Cons x xs)) = (StrConcat x (StrFlatten xs))
 
+// Returns true if two strings are equal
 // (StrEqual (List String) (List String)) : U32
 (StrEqual StrNil         StrNil)         = 1
 (StrEqual (StrCons x xs) (StrCons y ys)) = (& (== x y) (StrEqual xs ys))
@@ -55,6 +109,82 @@
 (StrHash str) = (StrHashGo str 0)
   (StrHashGo StrNil         hash) = hash
   (StrHashGo (StrCons x xs) hash) = (StrHashGo xs (+ (- (<< hash 5) hash) x))
+
+// StrJoin
+(StrJoin Nil          sep) = ""
+(StrJoin (Cons x Nil) sep) = x
+(StrJoin (Cons x xs)  sep) = (StrFlatten [x sep (StrJoin xs sep)])
+
+
+
+// Map
+// ===
+
+//type U32Map <A: Type> {
+  //empty
+  //value(val: A),
+  //branch(lft: U32Map<A>, rgt: U32Map<A>),
+//}
+
+// (Get (Tree a) U32) : (Pair Tree (Maybe a))
+(Get tree key) = (GetGo 32 tree key (λx x))
+  (GetGo n Empty            key self) = (Pair (self Empty) None)
+  (GetGo n (Entry val)      key self) = (Pair (self (Entry val)) (Some val))
+  (GetGo n (Nodes lft rgt)  key self) = (GetGoNodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt self)
+    (GetGoNodes 0 n key lft rgt self) = (GetGo n lft key λx(self (Nodes x rgt)))
+    (GetGoNodes 1 n key lft rgt self) = (GetGo n rgt key λx(self (Nodes lft x)))
+
+(Del tree key) = (DelGo 32 tree key)
+  (DelGo n (Nodes lft rgt) key)  = (DelGoNodes (& (>> key (- n 1)) 1) (- n 1) lft rgt key)
+    (DelGoNodes 0 n lft rgt key) = (Nodes (DelGo n lft key) rgt)
+    (DelGoNodes 1 n lft rgt key) = (Nodes lft (DelGo n rgt key))
+  (DelGo n tree key)             = Empty
+
+(Set tree key val) = (SetGo 32 tree key val)
+  (SetGo 0 tree             key val) = (Entry val)
+  (SetGo n Empty            key val) = (SetGoEmpty (& (>> key (- n 1)) 1) (- n 1) key val)
+    (SetGoEmpty 0 n key         val) = (Nodes (SetGo n Empty key val) Empty)
+    (SetGoEmpty 1 n key         val) = (Nodes Empty (SetGo n Empty key val))
+  (SetGo n (Nodes lft rgt)  key val) = (SetGoNodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt val)
+    (SetGoNodes 0 n key lft rgt val) = (Nodes (SetGo n lft key val) rgt)
+    (SetGoNodes 1 n key lft rgt val) = (Nodes lft (SetGo n rgt key val))
+
+(Mut tree key fun) = (MutGo 32 tree key fun)
+  (MutGo 0 (Entry x)        key fun) = (Entry (fun x))
+  (MutGo 0 tree             key fun) = tree
+  (MutGo n Empty            key fun) = (MutGoEmpty (& (>> key (- n 1)) 1) (- n 1) key fun)
+    (MutGoEmpty 0 n key         fun) = (Nodes (MutGo n Empty key fun) Empty)
+    (MutGoEmpty 1 n key         fun) = (Nodes Empty (MutGo n Empty key fun))
+  (MutGo n (Nodes lft rgt)  key fun) = (MutGoNodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt fun)
+    (MutGoNodes 0 n key lft rgt fun) = (Nodes (MutGo n lft key fun) rgt)
+    (MutGoNodes 1 n key lft rgt fun) = (Nodes lft (MutGo n rgt key fun))
+
+(IniMut tree key ini fun) = (IniMutGo 32 tree key ini fun)
+  (IniMutGo 0 (Entry x)        key ini fun) = (Entry (fun x))
+  (IniMutGo 0 tree             key ini fun) = (Entry (fun ini))
+  (IniMutGo n Empty            key ini fun) = (IniMutGoEmpty (& (>> key (- n 1)) 1) (- n 1) key ini fun)
+    (IniMutGoEmpty 0 n key         ini fun) = (Nodes (IniMutGo n Empty key ini fun) Empty)
+    (IniMutGoEmpty 1 n key         ini fun) = (Nodes Empty (IniMutGo n Empty key ini fun))
+  (IniMutGo n (Nodes lft rgt)  key ini fun) = (IniMutGoNodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt ini fun)
+    (IniMutGoNodes 0 n key lft rgt ini fun) = (Nodes (IniMutGo n lft key ini fun) rgt)
+    (IniMutGoNodes 1 n key lft rgt ini fun) = (Nodes lft (IniMutGo n rgt key ini fun))
+
+(ListToMap list) = (ListToMapGo list Empty)
+  (ListToMapGo (Cons (Pair key val) xs) map) = (ListToMapGo xs (Set map key val))
+  (ListToMapGo Nil                      map) = map
+
+(MapToList val) = ((MapToListGo val 0) Nil)
+  (MapToListGo Empty           key) = λx x
+  (MapToListGo (Entry val)     key) = λx (Cons (Pair key val) x)
+  (MapToListGo (Nodes lft rgt) key) = λx ((MapToListGo lft (* key 2)) ((MapToListGo rgt (+ (* key 2) 1)) x))
+
+
+
+// #############################################################################
+// # Parser Combinators                                                        #
+// #############################################################################
+
+
 
 // Parser
 // ======
@@ -68,12 +198,20 @@
 // Parser : Type -> Type
 // Parser A = Code -> Answer A
 
-// (IsNameChar Char) : Bool
+// (IsNameChar Char) : U32
 (IsNameChar chr) =
   let is_letter = (| (& (<= 'a' chr) (<= chr 'z')) (& (<= 'A' chr) (<= chr 'Z')))
   let is_number = (& (<= '0' chr) (<= chr '9'))
   let is_symbol = (& (== '_' chr) (== '.' chr))
   (| is_letter (| is_number is_symbol))
+
+// (IsUpper Char) : U32
+(IsUpper chr) =
+  (& (<= 'A' chr) (<= chr 'Z'))
+
+// (IsLower Char) : U32
+(IsLower chr) =
+  (& (<= 'a' chr) (<= chr 'z'))
 
 // (Bind a_parser:(Parser a) b_parser:(∀a (Parser B))) : (Parser B)
 (Bind a_parser b_parser) = λcode (BindGo b_parser (a_parser code))
@@ -83,7 +221,7 @@
 // (Done val:a) : (Parser a)
 (Done value) = λcode (Parsed code value)
 
-// (IsSpace Char) : Bool
+// (IsSpace Char) : U32
 (IsSpace chr) = (| (== 10 chr) (== ' ' chr))
 
 // (GetName String) : (Pair code:String name:String)
@@ -94,38 +232,58 @@
     (GetName_1 1 head tail)           = (GetName_2 head (GetNameGo tail))
     (GetName_2 head (Pair code name)) = (Pair code (StrCons head name))
 
-// (PeekHere text:String) : (Parser Bool)
-(PeekHere text)                               = λcode (Peek_0 text code λx(x))
-  (Peek_0 StrNil         ys             init) = (Parsed (init ys)  True)
-  (Peek_0 (StrCons x xs) StrNil         init) = (Parsed (init Nil) False)
-  (Peek_0 (StrCons x xs) (StrCons y ys) init) = (Peek_1 (== x y) xs y ys init)
-  (Peek_1 0 xs y ys init)                     = (Parsed (init (StrCons y ys)) False)
-  (Peek_1 1 xs y ys init)                     = (Peek_0 xs ys λk (init (StrCons y k)))
+// (Matcher text:String) : (Parser Bool)
+(Matcher consume text) = λcode (MatcherGo text code consume λx(x))
+  (MatcherGo Nil         ys             consume redo) = (Parsed ((If consume λx(x) redo) ys) True)
+  (MatcherGo (Cons x xs) StrNil         consume redo) = (Parsed (redo Nil) False)
+  (MatcherGo (Cons x xs) (StrCons y ys) consume redo) = (MatcherTest (x y) xs y ys consume redo)
+    (MatcherTest 0 xs y ys consume redo) = (Parsed (redo (StrCons y ys)) False)
+    (MatcherTest 1 xs y ys consume redo) = (MatcherGo xs ys consume λk(redo (StrCons y k)))
 
-// TODO: simplify by calling Peek here
-// (MatchHere text:String) : (Parser Bool)
-(MatchHere text)                               = λcode (Match_0 text code λx(x))
-  (Match_0 StrNil         ys             init) = (Parsed ys True)
-  (Match_0 (StrCons x xs) StrNil         init) = (Parsed (init Nil) False)
-  (Match_0 (StrCons x xs) (StrCons y ys) init) = (Match_1 (== x y) xs y ys init)
-  (Match_1 0 xs y ys init)                     = (Parsed (init (StrCons y ys)) False)
-  (Match_1 1 xs y ys init)                     = (Match_0 xs ys λk (init (StrCons y k)))
+// (TextComparer String) : (∀Char Bool)
+(TextComparer StrNil)         = Nil
+(TextComparer (StrCons x xs)) = (Cons λc(== x c) (TextComparer xs))
 
-// (Match text:String) : (Parser Bool)
-(Match text) = λcode ((MatchHere text) (SkipSpaces code))
+// (PeekCondsHere conds:(∀Char Bool)) : (Parser Bool)
+(PeekCondsHere conds) = λcode ((Matcher False conds) code)
+
+//// (PeekConds conds:(∀Char Bool)) : (Parser Bool)
+(PeekConds conds) = λcode ((Matcher False conds) (SkipSpaces code))
+
+// (PeekTextHere text:String) : (Parser Bool)
+(PeekTextHere text) = λcode ((Matcher False (TextComparer text)) code)
+
+// (PeekText text:String) : (Parser Bool)
+(PeekText text) = λcode ((Matcher False (TextComparer text)) (SkipSpaces code))
+
+// (MatchCondsHere conds:(∀Char Bool)) : (Parser Bool)
+(MatchCondsHere conds) = λcode ((Matcher True conds) code)
+
+// (MatchConds conds:(∀Char Bool)) : (Parser Bool)
+(MatchConds conds) = λcode ((Matcher True conds) (SkipSpaces code))
+
+// (MatchTextHere text:String) : (Parser Bool)
+(MatchTextHere text) = λcode ((Matcher True (TextComparer text)) code)
+
+// (MatchText text:String) : (Parser Bool)
+(MatchText text) = λcode ((Matcher True (TextComparer text)) (SkipSpaces code))
+
+// (TestChar cond:(∀Char Bool)) : (Parser Bool)
+(TestChar cond) = λcode ((TestCharHere cond) (SkipSpaces code))
 
 // (ParseTextHere text:String) : (Parser Unit)
-(ParseTextHere text)      = (Bind (MatchHere text) λgot(ParseTextHere_0 got))
-  (ParseTextHere_0 False) = (Failed "Expected...")
-  (ParseTextHere_0 True)  = (Done Unit)
+(ParseTextHere text)      = (Bind (MatchTextHere text) λgot(ParseTextHereGot got))
+  (ParseTextHereGot False) = λcode (Failed "Syntax error.") // TODO: show expected
+  (ParseTextHereGot True)  = (Done Unit)
 
 // (ParseText text:String) : (Parser Unit)
 (ParseText text) = λcode ((ParseTextHere text) (SkipSpaces code))
 
 // (SkipSpaces String) : String
-(SkipSpaces (StrCons x xs)) = (SkipSpaces_0 (IsSpace x) x xs)
-  (SkipSpaces_0 0 x xs)     = (StrCons x xs)
-  (SkipSpaces_0 1 x xs)     = (SkipSpaces xs)
+(SkipSpaces StrNil)         = StrNil
+(SkipSpaces (StrCons x xs)) = (SkipSpacesTest (IsSpace x) x xs)
+  (SkipSpacesTest 0 x xs)   = (StrCons x xs)
+  (SkipSpacesTest 1 x xs)   = (SkipSpaces xs)
 
 // (ParseNameHere) : (Parser String)
 ParseNameHere                        = λcode (ParseNameHere_0 ((GetName) code))
@@ -133,6 +291,21 @@ ParseNameHere                        = λcode (ParseNameHere_0 ((GetName) code))
 
 // (ParseName) : (Parser String)
 ParseName = λcode ((ParseNameHere) (SkipSpaces code))
+
+// (ParseEnd) : (Parser Bool)
+ParseEnd = λcode (ParseEndGo code)
+  (ParseEndGo StrNil)         = (Parsed Nil True)
+  (ParseEndGo (StrCons x xs)) = (Parsed (StrCons x xs) False)
+
+// Parses until a stop condition is true.
+// (ParseUntil parser:(Parser a) stop:(Parser Bool)) : (Parser (List a))
+(ParseUntil stop parser) = (Bind stop λs (ParseUntilGo s stop parser))
+  (ParseUntilGo False stop parser) =
+    (Bind parser                   λhead 
+    (Bind (ParseUntil stop parser) λtail 
+    (Done (Cons head tail))))
+  (ParseUntilGo True stop parser) =
+    (Done Nil)
 
 // (Grammar choices:(List (Parser (Maybe a)))) : (Parser a)
 (Grammar Nil)                                     = λcode (Failed "Expected...")
@@ -148,11 +321,16 @@ ParseName = λcode ((ParseNameHere) (SkipSpaces code))
   (Guard_0 (Parsed code False)   body) = (Parsed code None)
   (Guard_0 (Parsed code True)    body) = ((Bind body λgot(Done (Some got))) code)
 
-// Term
-// ====
 
-// Term Parsing
-// ------------
+
+// #############################################################################
+// # Kind2                                                                     #
+// #############################################################################
+
+
+
+// Parsing
+// =======
 
 // (ParseVar) : (Parser (Maybe Term))
 (ParseVar) = (Bind ParseName λname (ParseVar_0 name))
@@ -160,11 +338,11 @@ ParseName = λcode ((ParseNameHere) (SkipSpaces code))
   (ParseVar_0 (StrCons x xs)) = (Done (Some (Var (StrCons x xs))))
 
 // (ParseTyp) : (Parse (Maybe Term))
-(ParseTyp) = (Guard (Match "Type")
+(ParseTyp) = (Guard (MatchText "Type")
   (Done Typ))
 
 // (ParseAnn) : (Parse (Maybe Term))
-(ParseAnn) = (Guard (Match "{")
+(ParseAnn) = (Guard (MatchText "{")
   (Bind ParseTerm       λxval
   (Bind (ParseText ":") λskip
   (Bind ParseTerm       λxtyp
@@ -172,9 +350,9 @@ ParseName = λcode ((ParseNameHere) (SkipSpaces code))
   (Done (Ann xval xtyp)))))))
 
 // (ParseDef) : (Parser (Maybe Term))
-(ParseDef) = (Guard (Match "def ")
+(ParseDef) = (Guard (MatchText "def ")
   (Bind ParseName   λname
-  (Bind (Match ":") λanns
+  (Bind (MatchText ":") λanns
   (ParseDefAnn anns name))))
 (ParseDefAnn True name) =
   (Bind ParseTerm       λtype
@@ -189,9 +367,9 @@ ParseName = λcode ((ParseNameHere) (SkipSpaces code))
   (Done (Subst name expr body)))))
 
 // (ParseLet) : (Parser (Maybe Term))
-(ParseLet) = (Guard (Match "let ")
+(ParseLet) = (Guard (MatchText "let ")
   (Bind ParseName   λname
-  (Bind (Match ":") λanns
+  (Bind (MatchText ":") λanns
   (ParseLetAnn anns name))))
 (ParseLetAnn True name) =
   (Bind ParseTerm       λtype
@@ -206,7 +384,7 @@ ParseName = λcode ((ParseNameHere) (SkipSpaces code))
   (Done (Let name expr body)))))
 
 // (ParseAll) : (Parse (Maybe Term))
-(ParseAll) = (Guard (Match "∀")
+(ParseAll) = (Guard (MatchText "∀")
   (Bind (ParseText "(")  λskip
   (Bind ParseName        λname
   (Bind (ParseText ":")  λskip
@@ -216,42 +394,143 @@ ParseName = λcode ((ParseNameHere) (SkipSpaces code))
   (Done (All name type body)))))))))
 
 // (ParseLam) : (Parser (Maybe Term))
-(ParseLam) = (Guard (Match "λ")
+(ParseLam) = (Guard (MatchText "λ")
   (Bind ParseName λname
   (Bind ParseTerm λbody
   (Done (Lam name body)))))
 
 // (ParseApp) : (Parser (Maybe Term)) 
-(ParseApp) = (Guard (Match "(")
+(ParseApp) = (Guard (MatchText "(")
   (Bind ParseTerm       λfunc
   (Bind ParseTerm       λargm
   (Bind (ParseText ")") λx
   (Done (App func argm))))))
+
+// (ParseApp) : (Parser (Maybe Term)) 
+(ParseCtr) = (Guard (PeekConds [λx(== x '(') λx(IsUpper x)])
+  (Bind (ParseText "(")                    λskip
+  (Bind ParseName                          λname
+  (Bind (ParseUntil (MatchText ")") ParseTerm) λargs
+  (Done (Ctr name args))))))
+
+// (ParseMet) : (Parser (Maybe Term))
+(ParseMet) = (Guard (MatchText "_")
+  (Bind ParseName λname
+  (Done (Met (StrHash name)))))
 
 // (ParseTerm) : (Parser Term)
 (ParseTerm) = (Grammar [
   ParseDef,
   ParseLet,
   ParseAnn,
+  ParseCtr,
   ParseAll,
   ParseLam,
   ParseApp,
   ParseTyp,
+  ParseMet,
   ParseVar,
 ])
 
-// (Read code) : Term
-(Read code) = (Read_0 ((ParseTerm) code))
-  (Read_0 (Parsed code term)) = term
+// (GetCtrName Term) : String
+(GetCtrName (Ctr name args)) = name
+(GetCtrName term)            = "?"
 
-// Term Stringification
-// --------------------
+// Decl : Type
+//   (DefType lhs:Term rhs:Term) : Decl
+//   (DefRule lhs:Term rhs:Term) : Decl
+
+// (ParseDecl) : (Parser Decl)
+(ParseDecl) =
+  (Bind ParseTerm       λlhs
+  (Bind (MatchText ":") λtyp
+  (ParseDecl_rhs typ lhs)))
+(ParseDecl_rhs True lhs) = 
+  (Bind ParseTerm λrhs
+  (Done (DefType lhs rhs)))
+(ParseDecl_rhs False lhs) =
+  (Bind (ParseText "=") λskp
+  (Bind ParseTerm       λrhs
+  (Done (DefRule lhs rhs))))
+
+// (ParseDecls) : (Parser (List Decl))
+(ParseDecls) = (ParseUntil
+  λcode((ParseEnd) (SkipSpaces code))
+  ParseDecl)
+
+// (ReadTerm String) : Term
+(ReadTerm code) = (ReadTermGot ((ParseTerm) code))
+  (ReadTermGot (Parsed code term)) = term
+  (ReadTermGot (Failed err))       = (Var (StrConcat "[ParseError] " err))
+
+// (ReadFile String) : File
+(ReadFile code) = (ReadFileGot ((ParseDecls) code))
+  (ReadFileGot (Parsed code decls)) = (FileMake decls)
+  (ReadFileGot (Failed err))        = (StrConcat "[ParseError] " err) // FIXME ill-typed
+
+// File
+// ====
+
+// data Type {
+//   lhs: Term
+//   rhs: Term
+// }
+
+// data Rule {
+//   lhs: Term
+//   rhs: Term
+// }
+
+// data Entry {
+//   type: (Pair Term Term)
+//   rules: List<Rule>
+// }
+
+// type File = U32Map Entry
+
+// EntryEmpty : Entry
+EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
+
+// (EntrySetType entry:Entry new_type:Type) : Entry
+(EntrySetType (NewEntry type rules) new_type) = (NewEntry new_type rules)
+
+// (EntrySetType entry:Entry new_rule:Rule) : Entry
+(EntryAddRule (NewEntry type rules) new_rule) = (NewEntry type (Cons new_rule rules))
+
+// (FileMake (List Decl)) : File
+(FileMake Nil) = 
+  Empty
+(FileMake (Cons (DefType lhs rhs) decls)) =
+  let file = (FileMake decls)
+  let name = (GetCtrName lhs)
+  let init = EntryEmpty
+  let func = λentry (EntrySetType entry (DefType lhs rhs))
+  (IniMut file (StrHash name) init func)
+(FileMake (Cons (DefRule lhs rhs) decls)) =
+  let file = (FileMake decls)
+  let name = (GetCtrName lhs)
+  let init = EntryEmpty
+  let func = λentry (EntryAddRule entry (DefRule (CacheUses lhs rhs) rhs))
+  (IniMut file (StrHash name) init func)
+
+(CacheUses (Var name)      rhs) = (Var name (Uses name rhs))
+(CacheUses (Ctr name vars) rhs) = (Ctr name (CacheUsesMany vars rhs))
+
+(CacheUsesMany Nil         rhs) = Nil
+(CacheUsesMany (Cons x xs) rhs) = (Cons (CacheUses x rhs) (CacheUsesMany xs rhs))
+
+// Stringifying
+// ============
 
 // (Show term:Term) : String
 (Show term) = ((ShowGo term) "")
   (ShowGo (Var name)) =
     λx((ShowGoStr name)
       x)
+  (ShowGo (Met hash)) =
+    λx((ShowGoStr "_")
+      ((ShowGoStr (ShowU32 hash))
+      x))
   (ShowGo (Let name expr body)) =
     λx((ShowGoStr "let ")
       ((ShowGoStr name)
@@ -291,89 +570,189 @@ ParseName = λcode ((ParseNameHere) (SkipSpaces code))
       ((ShowGo argm)
       ((ShowGoStr ")")
       x)))))
+  (ShowGo (Ctr name args)) =
+    λx((ShowGoStr "(")
+      ((ShowGoStr name)
+      ((ShowGoMany args)
+      ((ShowGoStr ")")
+      x))))
+  (ShowGoMany Nil) =
+    λx x
+  (ShowGoMany (Cons t ts)) =
+    λx((ShowGoStr " ")
+      ((ShowGo t)
+      ((ShowGoMany ts)
+      x)))
   (ShowGoStr xs) =
     λx(StrConcat xs x)
 
+// (ShowU32 U32) : String
+(ShowU32 n) = (ShowU32Build n StrNil)
+  (ShowU32Build n str) = 
+    let next = (StrCons (+ 48 (% n 10)) str)
+    ((If (IsOne (< n 10)) λx(x) λx(ShowU32Build (/ n 10) x)) next)
+
+// (ShowEquations (List (Pair HTerm HTerm)) : String
+(ShowEquations Nil) = ""
+(ShowEquations (Cons (Pair a b) eqs)) =
+  (StrFlatten [
+    "- "
+    (Show (Low a))
+    " == "
+    (Show (Low b))
+    NewLine
+    (ShowEquations eqs)
+  ])
+
+// (ShowSubst Subst) : String
+(ShowSubst Nil) = ""
+(ShowSubst (Cons (Pair name value) subst)) =
+  (StrFlatten [
+    "- "
+    (ShowU32 name)
+    " <- "
+    (Show (Low value))
+    NewLine
+    (ShowSubst subst)
+  ])
+
+
+
 // Substitution
-// ------------
+// ============
 
 // Used for parse-time subst (def), NOT by the evaluator/checker!
-// Assumes no freevars.
-
 // (Subst String Term Term) : Term
-(Subst nm val (Var name))           = (If (StrEqual name nm) val (Var name))
+(Subst nm val (Var name))           = (If (IsOne (StrEqual name nm)) val (Var name))
+(Subst nm val (Met hash))           = (Met hash)
 (Subst nm val Typ)                  = Typ
 (Subst nm val (Ann xval xtyp))      = (Ann (Subst nm val xval) (Subst nm val xtyp))
 (Subst nm val (Let name expr body)) = (Let name (Subst nm val expr) (SubstBody nm val name body))
 (Subst nm val (All name type body)) = (All name (Subst nm val type) (SubstBody nm val name body))
 (Subst nm val (Lam name body))      = (Lam name (SubstBody nm val name body))
 (Subst nm val (App func argm))      = (App (Subst nm val func) (Subst nm val argm))
+(Subst nm val (Ctr name args))      = (Ctr name (Map args λx(Subst nm val x)))
 
 // (SubstBody String Term String Term) : Term
 (SubstBody nm val name body) = (SubstBodyGo (StrEqual nm name) nm val body)
   (SubstBodyGo 0 nm val body) = (Subst nm val body)
   (SubstBodyGo 1 nm val body) = body
 
-// Term Evaluation
-// ---------------
+
+
+// Evaluation
+// ----------
+
+// FIXME temporary function, gets the first body of an entry
+// (GetEntryBody File String) : Term
+(GetEntryBody file name) = (PairGet (Get file (StrHash name)) λfile λentry (GetBodyGot file entry))
+  (GetBodyGot file (Some (NewEntry type (Cons (DefRule lhs rhs) rest)))) = rhs
 
 // Counts free occurrences of a name
-// TODO: replace CountShadow by If
-// (Count String Term) : U32
-(Count nm (Var name))           = (StrEqual name nm)
-(Count nm Typ)                  = 0
-(Count nm (Ann xval xtyp))      = (Count nm xval)
-(Count nm (Let name expr body)) = (+ (Count nm expr) (CountShadow (StrEqual nm name) nm body))
-(Count nm (All name type body)) = (+ (Count nm type) (CountShadow (StrEqual nm name) nm body))
-(Count nm (Lam name body))      = (CountShadow (StrEqual nm name) nm body)
-(Count nm (App func argm))      = (+ (Count nm func) (Count nm argm))
-(CountShadow 0 nm body)         = (Count nm body)
-(CountShadow 1 nm body)         = 0
+// (Uses String Term) : U32
+(Uses nm (Var name))           = (StrEqual name nm)
+(Uses nm (Met hash))           = 0
+(Uses nm Typ)                  = 0
+(Uses nm (Ann xval xtyp))      = (Uses nm xval)
+(Uses nm (Let name expr body)) = (+ (Uses nm expr) (UsesShadow (StrEqual nm name) nm body))
+(Uses nm (All name type body)) = (+ (Uses nm type) (UsesShadow (StrEqual nm name) nm body))
+(Uses nm (Lam name body))      = (UsesShadow (StrEqual nm name) nm body)
+(Uses nm (App func argm))      = (+ (Uses nm func) (Uses nm argm))
+(Uses nm (Ctr name args))      = (UsesMany nm args)
+  (UsesMany nm Nil)            = 0
+  (UsesMany nm (Cons x xs))    = (+ (Uses nm x) (UsesMany nm xs))
+(UsesShadow 0 nm body)         = (Uses nm body)
+(UsesShadow 1 nm body)         = 0
 
 // Appends N copies of a term to a vars context
+// (Clone U32 String a (List (Pair String a))) : (List (Pair String a))
 (Clone 0 name term ctx) = ctx
 (Clone 1 name term ctx) = (Cons (Pair name term) ctx)
 (Clone n name term ctx) = (Cons (Pair name term) (Clone (- n 1) name term ctx))
 
 // Converts a term to high-order
-// (High term:Term) : HTerm
-(High term) = (PairGet (HighGo term Nil) λx λy y)
-  (HighGo (Var name) vars) = (HighFind name vars)
-    (HighFind name Nil) = (Pair Nil (HVar name))
-    (HighFind name (Cons (Pair var val) vars)) = (HighFound (StrEqual name var) name var val vars)
-      (HighFound 1 name var val vars) =
-        (Pair vars val)
-      (HighFound 0 name var val vars) =
-        (PairGet (HighFind name vars) λvars λgot
-        (Pair (Cons (Pair var val) vars) got))
-  (HighGo (Ann xval xtyp) vars) =
-    (HighGo xval vars)
-  (HighGo Typ vars) =
-    (Pair vars HTyp)
-  (HighGo (All name type body) vars) =
-    (PairGet (HighGo type vars) λvars λtype
-    (PairGet (HighGo body (Clone (Count name body) name $x vars)) λvars λbody
-    (Pair vars (HAll type λ$x body))))
-  (HighGo (Let name expr body) vars) =
-    (PairGet (HighGo expr vars) λvars λexpr
-    (PairGet (HighGo body (Clone (Count name body) name expr vars)) λvars λbody
-    (Pair vars body)))
-  (HighGo (Lam name body) vars) =
-    (PairGet (HighGo body (Clone (Count name body) name $x vars)) λvars λbody
-    (Pair vars (HLam λ$x body)))
-  (HighGo (App func argm) vars) =
-    (PairGet (HighGo func vars) λvars λfunc
-    (PairGet (HighGo argm vars) λvars λargm
-    (Pair vars (HApply func argm))))
+// TODO linearize file
+// (High file:File term:Term) : HTerm
+(High file term) = (TripleGet (HighGo term file Nil) λfile λvars λterm term)
 
-// Application
+  // (HighGo file:File term:Term file:File vars:(List (Pair String HTerm))) : (Triple File (List (Pair String HTerm)) HTerm)
+  (HighGo (Var name) file vars) = (HighFind name file vars)
+    (HighFind name file Nil) = (Triple file Nil (HVar name))
+    (HighFind name file (Cons (Pair var val) vars)) = (HighFound (StrEqual name var) name var val file vars)
+      (HighFound 1 name var val file vars) = (Triple file vars val)
+      (HighFound 0 name var val file vars) = (TripleGet (HighFind name file vars) λfile λvars λgot (Triple file (Cons (Pair var val) vars) got))
+  (HighGo (Ann xval xtyp) file vars) =
+    (HighGo xval file vars)
+  (HighGo Typ file vars) =
+    (Triple file vars HTyp)
+  (HighGo (All name type body) file vars) =
+    (TripleGet (HighGo type file vars) λfile λvars λtype
+    (TripleGet (HighGo body file (Clone (Uses name body) name $x vars)) λfile λvars λbody
+    (Triple file vars (HAll type λ$x body))))
+  (HighGo (Let name expr body) file vars) =
+    (TripleGet (HighGo expr file vars) λfile λvars λexpr
+    (TripleGet (HighGo body file (Clone (Uses name body) name expr vars)) λfile λvars λbody
+    (Triple file vars body)))
+  (HighGo (Lam name body) file vars) =
+    (TripleGet (HighGo body file (Clone (Uses name body) name $x vars)) λfile λvars λbody
+    (Triple file vars (HLam λ$x body)))
+  (HighGo (App func argm) file vars) =
+    (TripleGet (HighGo func file vars) λfile λvars λfunc
+    (TripleGet (HighGo argm file vars) λfile λvars λargm
+    (Triple file vars (HApply func argm))))
+  (HighGo (Ctr name args) file vars) =
+    (TripleGet (HighGoMany args file vars) λfile λvars λargs
+      (PairGet (Get file (StrHash name))   λfile λentry
+      (HighGoRules entry name args file vars)))
+    (HighGoRules (Some (NewEntry type rules)) name args file vars) = (HRules rules (HCtr name args) file vars)
+    (HighGoRules None                         name args file vars) = (Triple file vars (HCtr name args))
+  (HighGo (Met hash) file vars) =
+    (Triple file vars (HMet hash))
+
+  (HighGoMany Nil file vars) =
+    (Triple file vars Nil)
+  (HighGoMany (Cons x xs) file vars) =
+    (TripleGet (HighGo     x  file vars) λfile λvars λhead
+    (TripleGet (HighGoMany xs file vars) λfile λvars λtail
+    (Triple file vars (Cons head tail))))
+
+//(Ctr "Add" [(Ctr "Succ" [(Var "x")]) (Ctr "Succ" [(Var "y")]))
+//--------------------------------------------------------------
+//(Ctr "Add" [(Ctr "Succ" [A        ]) (Ctr "Succ" [B        ]))
+
+// TODO: perhaps linearize term?
+// (HRules (List Rule) HTerm File Vars) : HTerm
+(HRules Nil                            term file vars) = (Triple file vars term)
+(HRules (Cons (DefRule lhs rhs) rules) term file vars) = (HRulesMatched (HMatchGo lhs term) rhs rules term file vars)
+  (HRulesMatched None        rhs rules term file vars) = (HRules rules term file vars)
+  (HRulesMatched (Some subs) rhs rules term file vars) = (HighGo rhs file (subs vars))
+
+// (Match Term Term) : (Maybe (List (Pair String HTerm)))
+(HMatch a b rhs) = (MaybeMap (HMatchGo a b) λx(x Nil))
+
+  (HMatchGo (Ctr a_name a_args) (HCtr b_name b_args)) = (If (IsOne (StrEqual a_name b_name)) (HMatchGoMany a_args b_args) None)
+  (HMatchGo (Var a_name uses)   b)                    = (Some λx(Clone uses a_name b x))
+  (HMatchGo a                   b)                    = None
+
+  (HMatchGoMany Nil Nil                ) = (Some λx x)
+  (HMatchGoMany Nil         (Cons b bs)) = None
+  (HMatchGoMany (Cons a ab) Nil        ) = None
+  (HMatchGoMany (Cons a as) (Cons b bs)) =
+    (Perhaps (HMatchGo     a  b ) λhead_subs
+    (Perhaps (HMatchGoMany as bs) λtail_subs  
+    (Some λx (head_subs (tail_subs x)))))
+
+// High-order application
 (HApply (HLam fbody) argm) = (fbody argm)
 (HApply func         argm) = (HApp func argm)
 
 // Converts a term to low-order
 (Low term) = (LowGo term 0)
+
   (LowGo (HVar name) depth) =
     (Var name)
+  (LowGo (HMet hash) depth) =
+    (Met hash)
   (LowGo HTyp depth) =
     Typ
   (LowGo (HAll type body) depth) =
@@ -390,155 +769,276 @@ ParseName = λcode ((ParseNameHere) (SkipSpaces code))
     let func = (LowGo func depth)
     let argm = (LowGo argm depth)
     (App func argm)
+  (LowGo (HCtr name args) depth) =
+    let args = (LowGoMany args depth)
+    (Ctr name args)
 
-(Normal term) = (Low (High term))
+  (LowGoMany Nil         depth) = Nil
+  (LowGoMany (Cons x xs) depth) = (Cons (LowGo x depth) (LowGoMany xs depth))
 
-// Term Type-Checker
-// -----------------
+// Normalizes a term
+(Normal file term) = (Low (High file term))
+
+
+
+// Type-Checking
+// -------------
 
 // Result : Type -> Type
-// Result A = Ok A | Err String
+// Result A
+//   = Ok (List (Pair HTerm HTerm)) A
+//   | Err String
 
-// (Bind a_parser:(Parser a) b_parser:(∀a (Parser B))) : (Parser B)
-(Chain (Err str) b_result) = (Err str)
-(Chain (Ok val)  b_result) = (b_result val)
+// Monadic bind function of the "Result" type
+// (Chain a_parser:(Parser a) b_parser:(∀a (Parser B))) : (Parser B)
+(Chain (Err str)    b_result) = (Err str)
+(Chain (Ok eqs val) b_result) = (b_result eqs val)
 
-// (Equal HTerm HTerm) : Bool
-(Equal (HVal a_numb)        (HVal b_numb)        depth) = (== a_numb b_numb)
-(Equal (HVar a_name)        (HVar b_name)        depth) = (StrEqual a_name b_name)
-(Equal HTyp                 HTyp                 depth) = 1
-(Equal (HAll a_type a_body) (HAll b_type b_body) depth) = (& (Equal a_type b_type depth) (Equal (a_body (HVal depth)) (b_body (HVal depth)) (+ depth 1)))
-(Equal (HLam a_body)        (HLam b_body)        depth) = (Equal (a_body (HVal depth)) (b_body (HVal depth)) (+ depth 1))
-(Equal (HApp a_func a_argm) (HApp b_func b_argm) depth) = (& (Equal a_func b_func depth) (Equal a_argm b_argm depth))
-(Equal a                    b                    depth) = 0
+// (InferGo File Term Ctx) : (Result (Pair Subst Term))
+(Infer file term) = (InferUnify (InferGo file term Nil Nil))
+  (InferUnify (Err err))    = (Err err)
+  (InferUnify (Ok eqs typ)) = (InferFinish (Unify eqs Empty) typ)
 
-// (InferGo Term Ctx) : (Result Term)
-(Infer term) = (InferGo term Nil)
-  (InferGo (Var name) ctx) = (InferGoFind name ctx)
-    (InferGoFind name Nil) =
-      (Err (StrConcat "Unbound: " name))
-    (InferGoFind name (Cons (Pair var typ) ctx)) =
-      (If (StrEqual name var) (Ok typ) (InferGoFind name ctx))
-  (InferGo Typ ctx) =
-    (Ok HTyp)
-  (InferGo (Ann xval xtyp) ctx) =
-    let htyp = (High xtyp)
-    (Chain (CheckGo xtyp HTyp ctx) λok
-    (Chain (CheckGo xval htyp ctx) λok
-    (Ok htyp)))
-  (InferGo (All name type body) ctx) =
-    (Chain (CheckGo type HTyp ctx) λok
-    (Chain (CheckGo body HTyp (Cons (Pair name (High type)) ctx)) λok
-    (Ok HTyp)))
-  (InferGo (Let name expr body) ctx) =
-    (Chain (InferGo expr ctx) λexpr_t
-    (InferGo body (Cons (Pair name expr_t) ctx)))
-  (InferGo (Lam name body) ctx) =
+  (InferFinish (Err err)      typ) = (Err err)
+  (InferFinish (Ok eqs subst) typ) = (Ok eqs (Pair subst (SubstHoles subst typ)))
+
+  // TODO: linearize file? probably not needed
+  (InferGo file (Var name) ctx eqs) = (InferGoFind name ctx eqs)
+    (InferGoFind name Nil eqs) = (Err (StrConcat "Unbound: " name))
+    (InferGoFind name (Cons (Pair var typ) ctx) eqs) = (InferGoFound (StrEqual name var) name typ ctx eqs)
+      (InferGoFound 1 name typ ctx eqs) = (Ok eqs typ)
+      (InferGoFound 0 name typ ctx eqs) = (InferGoFind name ctx eqs)
+  (InferGo file (Met hash) ctx eqs) =
+    (Ok eqs HTyp)
+  (InferGo file Typ ctx eqs) =
+    (Ok eqs HTyp)
+  (InferGo file (Ann xval xtyp) ctx eqs) =
+    let htyp = (High file xtyp)
+    (Chain (CheckGo file xtyp HTyp ctx eqs) λeqs λok
+    (Chain (CheckGo file xval htyp ctx eqs) λeqs λok
+    (Ok eqs htyp)))
+  (InferGo file (All name type body) ctx eqs) =
+    (Chain (CheckGo file type HTyp ctx eqs) λeqs λok
+    (Chain (CheckGo file body HTyp (Cons (Pair name (High file type)) ctx) eqs) λeqs λok
+    (Ok eqs HTyp)))
+  (InferGo file (Let name expr body) ctx eqs) =
+    (Chain (InferGo file expr ctx eqs) λeqs λexpr_t
+    (InferGo file body (Cons (Pair name expr_t) ctx) eqs))
+  (InferGo file (Lam name body) ctx eqs) =
     (Err "Can't infer lambda.")
-  (InferGo (App func argm) ctx) =
-    (Chain (InferGo func ctx) λft (InferGoApp ft argm ctx))
-      (InferGoApp (HAll ftype fbody) argm ctx) =
-        (Chain (CheckGo argm ftype ctx) λok
-        (Ok (fbody (High argm))))
-      (InferGoApp other argm ctx) =
-        (Err "Non-function application.")
+  (InferGo file (App func argm) ctx eqs) =
+    (Chain (InferGo file func ctx eqs) λeqs λft (InferGoApp file ft argm ctx eqs))
+      (InferGoApp file (HAll ftype fbody) argm ctx eqs) =
+        (Chain (CheckGo file argm ftype ctx eqs) λeqs λok
+        (Ok eqs (fbody (High file argm))))
+      (InferGoApp file other argm ctx eqs) =
+        (Err ["Non-function application.", other, argm, ctx])
+  (InferGo file (Ctr name args) ctx eqs) =
+    (Ok eqs HTyp)
       
   // (CheckGo Term Term Ctx) : (Result Unit)
-  (CheckGo (Lam name body) (HAll t_type t_body) ctx) = 
-    (Chain (CheckGo body (t_body (HVar name)) (Cons (Pair name t_type) ctx)) λres
-    (Ok res))
-  (CheckGo term type ctx) =
-    (Chain (InferGo term ctx) λterm_t
-    (CheckGoEqual (Equal term_t type 0) type term_t))
+  (CheckGo file (Lam name body) (HAll t_type t_body) ctx eqs) = 
+    (Chain (CheckGo file body (t_body (HVar name)) (Cons (Pair name t_type) ctx) eqs) λeqs λres
+    (Ok eqs res))
+  (CheckGo file term type ctx eqs) =
+    (Chain (InferGo file term ctx eqs) λeqs λterm_t
+    (Ok (Cons (Pair type term_t) eqs) Unit))
 
-// (CheckGoEqual U32 HTerm HTerm) : (Result Unit)
-(CheckGoEqual 1 expect detect) = (Ok Unit)
-(CheckGoEqual 0 expect detect) = (Err (StrFlatten [
-  "Type mismatch.",
-  " Expected: `", (Show (Low expect)), "`.",
-  " Detected: `", (Show (Low detect)), "`.",
-]))
+// FIXME: this will loop if we subst `a_hash <- (HMet a_hash)`, since the Equal
+// rewrite rule will be called repeatedly. I don't have the time to reason about
+// this right now, so I'll leave this to a future.
+// (Equal HTerm HTerm U32) : (Pair Subst Bool)
+(Equal (HVal a_numb) (HVal b_numb) depth subst) =
+  (Pair subst (== a_numb b_numb))
+(Equal (HVar a_name) (HVar b_name) depth subst) =
+  (Pair subst (StrEqual a_name b_name))
+(Equal HTyp HTyp depth subst) =
+  (Pair subst 1)
+(Equal (HAll a_type a_body) (HAll b_type b_body) depth subst) =
+  (PairGet (Equal a_type b_type depth subst) λsubst λtype_eq
+  (PairGet (Equal (a_body (HVal depth)) (b_body (HVal depth)) (+ depth 1) subst) λsubst λbody_eq
+  (Pair subst (& type_eq body_eq))))
+(Equal (HLam a_body) (HLam b_body) depth subst) =
+  (PairGet (Equal (a_body (HVal depth)) (b_body (HVal depth)) (+ depth 1) subst) λsubst λbody_eq
+  (Pair subst body_eq))
+(Equal (HApp a_func a_argm) (HApp b_func b_argm) depth subst) =
+  (PairGet (Equal a_func b_func depth subst) λsubst λfunc_eq
+  (PairGet (Equal a_argm b_argm depth subst) λsubst λargm_eq
+  (Pair subst (& func_eq argm_eq))))
+(Equal (HMet a_hash) (HMet b_hash) depth subst) =
+  (Pair subst 1)
+(Equal (HMet a_hash) b depth subst) = (PairGet (Get subst a_hash) λsubst λgot_a (Equal.Got.0 a_hash got_a b depth subst))
+  (Equal.Got.0 a_hash None     b depth subst) = (Pair (Set subst a_hash b) 1)
+  (Equal.Got.0 a_hash (Some a) b depth subst) = (Equal a b depth subst)
+(Equal a (HMet b_hash) depth subst) = (PairGet (Get subst b_hash) λsubst λgot_b (Equal.Got.1 b_hash a got_b depth subst))
+  (Equal.Got.1 b_hash a None     depth subst) = (Pair (Set subst b_hash a) 1)
+  (Equal.Got.1 b_hash a (Some b) depth subst) = (Equal a b depth subst)
+(Equal a b depth subst) =
+  (Pair subst 0)
 
-(Test code) = let term = (Read code); (TestPrint (Infer term) term)
-  (TestPrint (Err err) term) = err
-  (TestPrint (Ok type) term) = (StrFlatten ["main : ", (Show (Low type)), " = ", (Show (Normal term))])
+// TODO: I don't want to commit to any complex unification algorithm, so this
+// implementation will just substitute immediate (flex-rigid) terms, for now.
+// In a future, we should revisit this, and decide what unification and
+// resolution algorithms we want to have on the language.
+// (Unify equations:(List (Pair HTerm HTerm)) substitutions:(Map HTerm)) : (Result (Map HTerm))
+(Unify eqs subst) = (UnifyGo eqs subst Nil)
+  (UnifyGo Nil subst Nil) =
+    (Ok Nil subst)
+  (UnifyGo Nil subst errs) =
+    (Err (StrJoin (ListMap errs λx(x subst)) NewLine))
+  (UnifyGo (Cons (Pair a b) eqs) subst errs) =
+    (PairGet (Equal a b 0 subst) λsubst λeq
+    (UnifyTest eq a b eqs subst errs))
+  (UnifyTest 0 a b eqs subst errs) =
+    let err = λsubst (StrFlatten [
+      "Type mismatch." NewLine
+      "- Expected: " (Show (Low (SubstHoles subst a))) NewLine
+      "- Detected: " (Show (Low (SubstHoles subst b))) NewLine
+    ])
+    (UnifyGo eqs subst (Cons err errs))
+  (UnifyTest 1 a b eqs subst errs) =
+    (UnifyGo eqs subst errs)
 
-// Checks some function calls
-Test0 = (Test "
-  let main
-    : ∀(a  : Type)
-      ∀(b  : Type)
-      ∀(aa : ∀(x: a) a)
-      ∀(ab : ∀(x: a) b)
-      ∀(ba : ∀(x: b) a)
-      ∀(bb : ∀(x: b) b)
-      ∀(x  : a)
-      ∀(y  : b)
-      a
-    = λa λb λaa λab λba λbb λx λy
-      (aa (ba (bb (bb (ab (aa (ba (ab (aa x)))))))))
-  main
-")
+// (SubstHoles Subst Term) : Term
+(SubstHoles subst (HVar name))        = (HVar name)
+(SubstHoles subst HTyp)               = HTyp
+(SubstHoles subst (HAnn xval xtyp))   = (HAnn (SubstHoles subst xval) (SubstHoles subst xtyp))
+(SubstHoles subst (HLet expr body))   = (HLet (SubstHoles subst expr) λx(SubstHoles subst (body x)))
+(SubstHoles subst (HAll type body))   = (HAll (SubstHoles subst type) λx(SubstHoles subst (body x)))
+(SubstHoles subst (HLam body))        = (HLam λx(SubstHoles subst (body x)))
+(SubstHoles subst (HApp func argm))   = (HApp (SubstHoles subst func) (SubstHoles subst argm))
+(SubstHoles subst (HMet hash))        = (PairGet (Get subst hash) λsubst λgot (SubstHolesGot subst hash got))
+  (SubstHolesGot subst hash None)     = (HMet hash)
+  (SubstHolesGot subst hash (Some x)) = (SubstHoles subst x)
 
-// Checks Church-Nats
-Test1 = (Test "
-  def Nat : Type =
-    ∀(p: Type) ∀(s: ∀(n: p) p) ∀(z: p) p
 
-  let zero : Nat =
-    λp λs λz z
 
-  let succ : ∀(n: Nat) Nat =
-    λn λp λs λz (s (((n p) s) z))
+// #############################################################################
+// # Tests                                                                     #
+// #############################################################################
 
-  (succ (succ (succ zero)))
-")
+(DebugPrintType (Err err)                  term) = err
+(DebugPrintType (Ok eqs (Pair subst type)) term) = (StrFlatten [
+  NewLine
+  "main : " (Show (Low type)) " = " NewLine
+  "  " (Show (Normal Empty term)) NewLine
+])
 
-// Checks type-level computations
-Test2 = (Test "
-  def Equal : ∀(t: Type) ∀(a: t) ∀(b: t) Type = λt λa λb ∀ (p: ∀(b: t) Type) ∀ (r: (p a)) (p b)
-  def refl : ∀(t: Type) ∀(a: t) (((Equal t) a) a) = λt λa λp λr r
+(DebugPrintAll (Err err)                  term) = err
+(DebugPrintAll (Ok eqs (Pair subst type)) term) = (StrFlatten [
+  NewLine
+  "Equations:" NewLine
+  "----------" NewLine
+  (ShowEquations eqs) NewLine
+  "Substitutions:" NewLine
+  "--------------" NewLine
+  (ShowSubst (MapToList subst)) NewLine
+  "Result:" NewLine
+  "-------" NewLine
+  (StrFlatten [
+    "main" NewLine
+    " : " (Show (Low type)) NewLine
+    " = " (Show (Normal Empty term)) NewLine
+  ])
+  NewLine
+])
 
-  def Nat : Type = ∀(p: Type) ∀(s: ∀(n: p) p) ∀(z: p) p
-  def zero : Nat = λp λs λz z
-  def succ : ∀(n: Nat) Nat = λn λp λs λz (s (((n p) s) z))
-  def mul : ∀(n: Nat) ∀(n: Nat) Nat = λn λm λp λs λz (((n p) ((m p) s)) z)
-  def exp : ∀(n: Nat) ∀(n: Nat) Nat = λn λm λp ((m ∀(x:p) p) (n p))
-  def n0 : Nat = zero
-  def n1 : Nat = (succ n0)
-  def n2 : Nat = (succ n1)
-  def n3 : Nat = (succ n2)
-  def n4 : Nat = (succ n3)
-  def n5 : Nat = (succ n4)
-  def n6 : Nat = (succ n5)
-  def n7 : Nat = (succ n6)
-  def n8 : Nat = (succ n7)
-  def n9 : Nat = (succ n8)
-  def n10 : Nat = (succ n9)
-  def n11 : Nat = (succ n10)
-  def n12 : Nat = (succ n11)
-  def n13 : Nat = (succ n12)
-  def n14 : Nat = (succ n13)
-  def n15 : Nat = (succ n14)
-  def n16 : Nat = (succ n15)
-  def n17 : Nat = (succ n16)
-  def n18 : Nat = (succ n17)
-  def n19 : Nat = (succ n18)
-  def n20 : Nat = (succ n19)
-  def n21 : Nat = (succ n20)
-  def n22 : Nat = (succ n21)
-  def n23 : Nat = (succ n22)
-  def n24 : Nat = (succ n23)
-  def Bool : Type = ∀(p: Type) ∀(t: p) ∀(f: p) p
-  def true : Bool = λp λt λf t
-  def false : Bool = λp λt λf f
-  def not : ∀(b: Bool) Bool = λb λp λt λf (((b p) f) t)
-  def xor : ∀(a: Bool) ∀(b: Bool) Bool = λa λb ((((a ∀(b:Bool) Bool) λb(((b Bool) false) true)) λb(((b Bool) true) false)) b)
-  def slow : ∀(n: Nat) Bool = λn (((n Bool) λr((xor r) r)) false)
-  def main : (((Equal Bool) (slow n24)) false) = ((refl Bool) false)
-  main
-")
+(Kind2 code) =
+  let term = (ReadTerm code)
+  (DebugPrintType (Infer Empty term) term)
 
-// (Main) = Test2
+//(Main n) = (Kind2 "
+  //def id : ∀(a: Type) ∀(x: a) a = λa λx x
 
-(Main in) = (Test in)
+  //def equal : ∀(t: Type) ∀(a: t) ∀(b: t) Type = λt λa λb ∀ (p: ∀(b: t) Type) ∀ (r: (p a)) (p b)
+  //def refl : ∀(t: Type) ∀(a: t) (((equal t) a) a) = λt λa λp λr r
+
+  //def bool : Type = ∀(p: Type) ∀(t: p) ∀(f: p) p
+  //def true : bool = λp λt λf t
+  //def false : bool = λp λt λf f
+  //def not : ∀(b: bool) bool = λb λp λt λf (((b p) f) t)
+  //def xor : ∀(a: bool) ∀(b: bool) bool = λa (((a Type) not) λb b)
+
+  //def nat : Type = ∀(p: Type) ∀(s: ∀(n: p) p) ∀(z: p) p
+  //def zero : nat = λp λs λz z
+  //def succ : ∀(n: nat) nat = λn λp λs λz (s (((n p) s) z))
+  //def mul : ∀(n: nat) ∀(n: nat) nat = λn λm λp λs λz (((n p) ((m p) s)) z)
+  //def exp : ∀(n: nat) ∀(n: nat) nat = λn λm λp ((m ∀(x:p) p) (n p))
+
+  //def list : ∀(a: Type) Type = λa ∀(p: Type) ∀(nil: p) ∀(cons: ∀(x: a) ∀(xs: p) p) p
+  //def nil : ∀(a: Type) (list a) = λa λp λnil λcons nil
+  //def cons : ∀(a: Type) ∀(x: a) ∀(xs: (list a)) (list a) = λa λx λxs λp λnil λcons ((cons x) (((xs p) nil) cons))
+
+  //def n0  : nat = zero
+  //def n1  : nat = (succ n0)
+  //def n2  : nat = (succ n1)
+  //def n3  : nat = (succ n2)
+  //def n4  : nat = (succ n3)
+  //def n5  : nat = (succ n4)
+  //def n6  : nat = (succ n5)
+  //def n7  : nat = (succ n6)
+  //def n8  : nat = (succ n7)
+  //def n9  : nat = (succ n8)
+  //def n10 : nat = (succ n9)
+  //def n11 : nat = (succ n10)
+  //def n12 : nat = (succ n11)
+  //def n13 : nat = (succ n12)
+  //def n14 : nat = (succ n13)
+  //def n15 : nat = (succ n14)
+  //def n16 : nat = (succ n15)
+  //def n17 : nat = (succ n16)
+  //def n18 : nat = (succ n17)
+  //def n19 : nat = (succ n18)
+  //def n20 : nat = (succ n19)
+  //def n21 : nat = (succ n20)
+  //def n22 : nat = (succ n21)
+  //def n23 : nat = (succ n22)
+  //def n24 : nat = (succ n23)
+  //def n25 : nat = (succ n24)
+  //def n26 : nat = (succ n25)
+  //def n27 : nat = (succ n26)
+  //def n28 : nat = (succ n27)
+  //def n29 : nat = (succ n28)
+  //def n30 : nat = (succ n29)
+  //def n31 : nat = (succ n30)
+  //def n32 : nat = (succ n31)
+
+  //def slow : ∀(n: nat) bool = λn (((n bool) λr((xor r) r)) true)
+  //def blow : ∀(n: nat) bool = λn ((((n Type) λrλb((xor (r b)) (r (not b)))) λx x) true)
+
+  //def the : ∀(a: Type) ∀(n: a) Type = λa λn ∀ (p: ∀(n: a) Type) ∀ (r: ∀(n: a) (p n)) (p n)
+  //def val : ∀(a: Type) ∀(n: a) ((the a) n) = λa λn λp λr (r n)
+
+  //def test0 : ((the _a) true) =
+    //((val _b) true)
+
+  //test0
+//")
+
+// WIP!
+(Main n) =
+  let file = (ReadFile "
+    (Not (True))  = (False)
+    (Not (False)) = (True)
+
+    (Inc (E))      = (E)
+    (Inc (I pred)) = (O (Inc pred))
+    (Inc (O pred)) = (I pred)
+
+    (Add a     (E)  ) = a
+    (Add (E)   b    ) = b
+    (Add (O a) (O b)) = (O (Add a b))
+    (Add (I a) (O b)) = (I (Add a b))
+    (Add (O a) (I b)) = (I (Add a b))
+    (Add (I a) (I b)) = (Inc (I (Add a b)))
+
+    (Foo (Z))   = (I (O (O (O (O (O (O (O (O (O (O (O (O (O (O (O (E)))))))))))))))))
+    (Foo (S x)) = (Add (Foo x) (Foo x))
+
+    (Main) = (Foo (S (S (S (S Z)))))
+  ")
+  let term = (ReadTerm "(Main)")
+  let term = (High file term)
+  let term = (Low term)
+  let term = (Show term)
+  term

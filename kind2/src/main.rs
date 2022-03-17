@@ -67,7 +67,7 @@ fn do_the_thing(kind2_code: &str, input_code: &str) -> Result<(), String> {
   // dbg!(&str_term);
 
   let main_call = lang::Term::Ctr {
-    name: "Main".to_string(),
+    name: "Kind2".to_string(),
     args: vec![ Box::new(str_term) ],
   };
   let main_pos = bd::alloc_term(&mut worker, &book, &main_call);

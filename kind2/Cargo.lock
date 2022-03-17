@@ -105,7 +105,9 @@ dependencies = [
 
 [[package]]
 name = "hvm"
-version = "0.1.19"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1913d07e3bb8218e0b5aa077adda5fafaa53833306072b3f3bb6e3ba228bd60"
 dependencies = [
  "itertools",
  "num_cpus",

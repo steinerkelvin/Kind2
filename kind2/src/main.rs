@@ -5,7 +5,7 @@ mod vm;
 
 use cli::{Parser, Cli};
 
-const KIND2_HVM_CODE: &str = include_str!("../../kind2.hvm");
+const KIND2_HVM_CODE: &str = include_str!("../kind2.hvm");
 
 fn main() {
   match run() {

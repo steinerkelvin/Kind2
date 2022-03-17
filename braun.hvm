@@ -24,11 +24,15 @@
 (Braun.get.go idx 1 (Braun.tie l x r)) =
   (Braun.get.go (>> idx 1) (& (>> idx 1) 1) r)
 
+(Arr.at.aux 0 idx t) = (None)
+(Arr.at.aux 1 idx t) = (Some (Braun.get.go (+ idx 1) (& (+ idx 1) 1) t))
+
 // main interface
 (Arr.empty) = (Arr.new 0 Braun.tip)
 (Arr.push (Arr.new n t) v) = (Arr.new (+ n 1) (Braun.push.go (+ n 1) (& (+ n 1) 1) t v))
-(Arr.pop (Arr.new n t)) = (Arr.new (- n 1) (Braun.pop.go (+ n 1) (& (+ n 1) 1) t))
-(Arr.at idx (Arr.new n t)) = (Braun.get.go (+ idx 1) (& (+ idx 1) 1) t)
+(Arr.pop (Arr.new n t)) = (Arr.new (- n 1) (Braun.pop.go n (& n 1) t))
+(Arr.at idx (Arr.new size t)) = (Arr.at.aux (< idx size) idx t)
+
 
 // Tests
 (Aux lim i 0 tree) =
@@ -36,5 +40,5 @@
   (Aux lim j (< lim j) (Arr.push tree i))
 (Aux lim i 1 tree) = tree
 
-(Main m n) = 
-  (Arr.at m (Aux n 0 0 (Arr.empty)))
+(Main) = 
+  (Arr.at 1 (Arr.pop (Arr.push (Arr.push Arr.empty 0) 1)))

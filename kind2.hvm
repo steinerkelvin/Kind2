@@ -26,6 +26,8 @@
 
 // (PairGet (Pair a b) (∀a ∀b c)) : c
 (PairGet (Pair x y) fn) = (fn x y)
+(PairFst (Pair x y)) = x
+(PairSnd (Pair x y)) = y
 
 
 
@@ -54,6 +56,10 @@
 // (MaybeMap (Maybe a) (∀a b)) : (Maybe b)
 (MaybeMap (Some a) f) = (Some (f a))
 (MaybeMap None     f) = None
+
+// (Maybe.Case (Maybe a) (∀a p) p) : p
+(Maybe.Case (Some x) case_none case_some) = (case_some x)
+(Maybe.Case None     case_none case_some) = case_none
 
 
 
@@ -117,6 +123,56 @@ NewLine = (StrCons 10 StrNil)
 
 
 
+// Array
+// =====
+
+(Array.Empty) = (Array 0 Braun.Tip)
+
+(Array.Push (Array n t) v) = (Array (+ n 1) (Braun.Push.go (+ n 1) (& (+ n 1) 1) t v))
+  (Braun.Push.go 1 o t v)                 = (Braun.Tie Braun.Tip v Braun.Tip)
+  (Braun.Push.go n 0 (Braun.Tie l x r) v) = (Braun.Tie (Braun.Push.go (>> n 1) (& (>> n 1) 1) l v) x r)
+  (Braun.Push.go n 1 (Braun.Tie l x r) v) = (Braun.Tie l x (Braun.Push.go (>> n 1) (& (>> n 1) 1) r v))
+  (Braun.Push n t v)                      = (Braun.Push.go n (& n 1) t v)
+
+(Array.Pop (Array n t)) = (Array (- n 1) (Braun.Pop.go n (& n 1) t))
+  (Braun.Pop.go 1 o t)                 = (Braun.Tip)
+  (Braun.Pop.go n 0 (Braun.Tie l x r)) = (Braun.Tie (Braun.Pop.go (>> n 1) (& (>> n 1) 1) l) x r)
+  (Braun.Pop.go n 1 (Braun.Tie l x r)) = (Braun.Tie l x (Braun.Pop.go (>> n 1) (& (>> n 1) 1) r))
+
+(Array.Mut (Array size t) i f) = (Array.Mut.aux (< i size) i f size t)
+  (Array.Mut.aux 0 i f size t) = (Array size t)
+  (Array.Mut.aux 1 i f size t) = (Array size (Braun.Mut.go (+ i 1) f (& (+ i 1) 1) t))
+  (Braun.Mut.go 1 f o (Braun.Tie l x r)) = (Braun.Tie l (f x) r)
+  (Braun.Mut.go i f 0 (Braun.Tie l x r)) = (Braun.Tie (Braun.Mut.go (>> i 1) f (& (>> i 1) 1) l) x r)
+  (Braun.Mut.go i f 1 (Braun.Tie l x r)) = (Braun.Tie l x (Braun.Mut.go (>> i 1) f (& (>> i 1) 1) r))
+
+(Array.Set (Array size t) i v) = (Array.Mut (Array size t) i λx(v))
+
+(Array.Get (Array size t) idx) = (Array.Get.aux (< idx size) idx t)
+  (Array.Get.aux 0 idx t) = (None)
+  (Array.Get.aux 1 idx t) = (Some (Braun.Get.go (+ idx 1) (& (+ idx 1) 1) t))
+  (Braun.Get.go 1 o (Braun.Tie l x r))   = x
+  (Braun.Get.go idx 0 (Braun.Tie l x r)) = (Braun.Get.go (>> idx 1) (& (>> idx 1) 1) l)
+  (Braun.Get.go idx 1 (Braun.Tie l x r)) = (Braun.Get.go (>> idx 1) (& (>> idx 1) 1) r)
+
+(Array.Got (Array size t) idx) = (Array.Got.aux (< idx size) idx size t)
+  (Array.Got.aux 0 idx size t) = (Pair (Array size t) (None))
+  (Array.Got.aux 1 idx size t) = ((Braun.Got.go (+ idx 1) (& (+ idx 1) 1) t) λt λv (Pair (Array size t) (Some v)))
+  (Braun.Got.go 1 o (Braun.Tie l x r)) = λt (t (Braun.Tie l x r) x)
+  (Braun.Got.go i 0 (Braun.Tie l x r)) = ((Braun.Got.go (>> i 1) (& (>> i 1) 1) l) λl λv λt (t (Braun.Tie l x r) v))
+  (Braun.Got.go i 1 (Braun.Tie l x r)) = ((Braun.Got.go (>> i 1) (& (>> i 1) 1) r) λr λv λt (t (Braun.Tie l x r) v))
+
+(Array.Size (Array size tree)) = (Pair (Array size tree) size)
+
+//(Array.Ini arr k v f)          = (Array.Ini.Got (Array.Get arr k) k v f)
+  //(Array.Ini.Got (Pair arr None)     k v f) = (Array.Set arr k v)
+  //(Array.Ini.Got (Pair arr (Some x)) k v f) = (Array.Set arr k (f x))
+
+// (Array.Range U32) : Array<U32>
+(Array.Range 0) = Array.Empty
+(Array.Range n) = (Array.Push (Array.Range (- n 1)) (- n 1))
+
+
 // Map
 // ===
 
@@ -159,15 +215,15 @@ NewLine = (StrCons 10 StrNil)
     (MutGoNodes 0 n key lft rgt fun) = (Nodes (MutGo n lft key fun) rgt)
     (MutGoNodes 1 n key lft rgt fun) = (Nodes lft (MutGo n rgt key fun))
 
-(IniMut tree key ini fun) = (IniMutGo 32 tree key ini fun)
-  (IniMutGo 0 (Entry x)        key ini fun) = (Entry (fun x))
-  (IniMutGo 0 tree             key ini fun) = (Entry (fun ini))
-  (IniMutGo n Empty            key ini fun) = (IniMutGoEmpty (& (>> key (- n 1)) 1) (- n 1) key ini fun)
-    (IniMutGoEmpty 0 n key         ini fun) = (Nodes (IniMutGo n Empty key ini fun) Empty)
-    (IniMutGoEmpty 1 n key         ini fun) = (Nodes Empty (IniMutGo n Empty key ini fun))
-  (IniMutGo n (Nodes lft rgt)  key ini fun) = (IniMutGoNodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt ini fun)
-    (IniMutGoNodes 0 n key lft rgt ini fun) = (Nodes (IniMutGo n lft key ini fun) rgt)
-    (IniMutGoNodes 1 n key lft rgt ini fun) = (Nodes lft (IniMutGo n rgt key ini fun))
+//(IniMut tree key ini fun) = (IniMutGo 32 tree key ini fun)
+  //(IniMutGo 0 (Entry x)        key ini fun) = (Entry (fun x))
+  //(IniMutGo 0 tree             key ini fun) = (Entry (fun ini))
+  //(IniMutGo n Empty            key ini fun) = (IniMutGoEmpty (& (>> key (- n 1)) 1) (- n 1) key ini fun)
+    //(IniMutGoEmpty 0 n key         ini fun) = (Nodes (IniMutGo n Empty key ini fun) Empty)
+    //(IniMutGoEmpty 1 n key         ini fun) = (Nodes Empty (IniMutGo n Empty key ini fun))
+  //(IniMutGo n (Nodes lft rgt)  key ini fun) = (IniMutGoNodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt ini fun)
+    //(IniMutGoNodes 0 n key lft rgt ini fun) = (Nodes (IniMutGo n lft key ini fun) rgt)
+    //(IniMutGoNodes 1 n key lft rgt ini fun) = (Nodes lft (IniMutGo n rgt key ini fun))
 
 (ListToMap list) = (ListToMapGo list Empty)
   (ListToMapGo (Cons (Pair key val) xs) map) = (ListToMapGo xs (Set map key val))
@@ -330,7 +386,7 @@ ParseEnd = λcode (ParseEndGo code)
 
 
 // Parsing
-// =======
+// -------
 
 // (ParseVar) : (Parser (Maybe Term))
 (ParseVar) = (Bind ParseName λname (ParseVar_0 name))
@@ -408,8 +464,8 @@ ParseEnd = λcode (ParseEndGo code)
 
 // (ParseApp) : (Parser (Maybe Term)) 
 (ParseCtr) = (Guard (PeekConds [λx(== x '(') λx(IsUpper x)])
-  (Bind (ParseText "(")                    λskip
-  (Bind ParseName                          λname
+  (Bind (ParseText "(")                        λskip
+  (Bind ParseName                              λname
   (Bind (ParseUntil (MatchText ")") ParseTerm) λargs
   (Done (Ctr name args))))))
 
@@ -432,13 +488,9 @@ ParseEnd = λcode (ParseEndGo code)
   ParseVar,
 ])
 
-// (GetCtrName Term) : String
-(GetCtrName (Ctr name args)) = name
-(GetCtrName term)            = "?"
-
-// Decl : Type
-//   (DefType lhs:Term rhs:Term) : Decl
-//   (DefRule lhs:Term rhs:Term) : Decl
+// (GetCtrId Term) : U32
+(GetCtrId (Ctr ctid args)) = ctid
+(GetCtrId term)            = "?"
 
 // (ParseDecl) : (Parser Decl)
 (ParseDecl) =
@@ -458,18 +510,76 @@ ParseEnd = λcode (ParseEndGo code)
   λcode((ParseEnd) (SkipSpaces code))
   ParseDecl)
 
-// (ReadTerm String) : Term
-(ReadTerm code) = (ReadTermGot ((ParseTerm) code))
+// (ReadTerm NameToId IdToName String) : Term
+(ReadTerm n2i i2n code) = ((GenIds (ReadTermGot ((ParseTerm) code)) n2i i2n) λn2i λi2n λterm term)
   (ReadTermGot (Parsed code term)) = term
   (ReadTermGot (Failed err))       = (Var (StrConcat "[ParseError] " err))
 
-// (ReadFile String) : File
+// (ReadFile String) : (Tuple NameTable File)
 (ReadFile code) = (ReadFileGot ((ParseDecls) code))
-  (ReadFileGot (Parsed code decls)) = (FileMake decls)
+  (ReadFileGot (Parsed code decls)) = (FileMake Empty Array.Empty decls)
   (ReadFileGot (Failed err))        = (StrConcat "[ParseError] " err) // FIXME ill-typed
 
+
+
+// Name Table
+// ----------
+
+// Converts every ctr name into a sequential id.
+// (GenIds NameToId IdToName Term) : (Tuple3 NameToId IdToName Term)
+(GenIds (Var name) n2i i2n) =
+  λt (t n2i i2n (Var name))
+(GenIds (Met hash) n2i i2n) =
+  λt (t n2i i2n (Met hash))
+(GenIds Typ n2i i2n) =
+  λt (t n2i i2n Typ)
+(GenIds (Ann xval xtyp) n2i i2n) =
+  ((GenIds xval n2i i2n) λn2i λi2n λxval
+  ((GenIds xtyp n2i i2n) λn2i λi2n λxtyp
+  λt (t n2i i2n (Ann xval xtyp))))
+(GenIds (Let name expr body) n2i i2n) =
+  ((GenIds expr n2i i2n) λn2i λi2n λexpr
+  ((GenIds body n2i i2n) λn2i λi2n λbody
+  λt (t n2i i2n (Let name expr body))))
+(GenIds (All name type body) n2i i2n) =
+  ((GenIds type n2i i2n) λn2i λi2n λtype
+  ((GenIds body n2i i2n) λn2i λi2n λbody
+  λt (t n2i i2n (All name type body))))
+(GenIds (Lam name body) n2i i2n) =
+  ((GenIds body n2i i2n) λn2i λi2n λbody
+  λt (t n2i i2n (Lam name body)))
+(GenIds (App func argm) n2i i2n) =
+  ((GenIds func n2i i2n) λn2i λi2n λfunc
+  ((GenIds argm n2i i2n) λn2i λi2n λargm
+  λt (t n2i i2n (App func argm))))
+(GenIds (Ctr name args) n2i i2n) =
+  let hash = (StrHash name)
+  (PairGet (Get n2i hash) λn2i λgot
+  (GenIds.Got got name hash args n2i i2n))
+(GenIds.Got None name hash args n2i (Array size tree)) =
+  let n2i = (Set n2i hash size)
+  let i2n = (Array.Push (Array size tree) name)
+  let ctr = size
+  let num = (+ size 1)
+  ((GenIds.Many args n2i i2n) λn2i λi2n λargs
+  λt (t n2i i2n (Ctr ctr args)))
+(GenIds.Got (Some ctid) name hash args n2i i2n) =
+  ((GenIds.Many args n2i i2n) λn2i λi2n λargs
+  λt (t n2i i2n (Ctr ctid args)))
+(GenIds.Many Nil n2i i2n) =
+  λt (t n2i i2n Nil)
+(GenIds.Many (Cons head tail) n2i i2n) =
+  ((GenIds      head n2i i2n) λn2i λi2n λhead
+  ((GenIds.Many tail n2i i2n) λn2i λi2n λtail
+  λt (t n2i i2n (Cons head tail))))
+
 // File
-// ====
+// ----
+
+// type Decl {
+//   DefType(lhs:Term, rhs:Term)
+//   DefRule(lhs:Term, rhs:Term)
+// }
 
 // data Type {
 //   lhs: Term
@@ -486,7 +596,7 @@ ParseEnd = λcode (ParseEndGo code)
 //   rules: List<Rule>
 // }
 
-// type File = U32Map Entry
+// type File = Array Entry
 
 // EntryEmpty : Entry
 EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
@@ -497,30 +607,35 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 // (EntrySetType entry:Entry new_rule:Rule) : Entry
 (EntryAddRule (NewEntry type rules) new_rule) = (NewEntry type (Cons new_rule rules))
 
-// (FileMake (List Decl)) : File
-(FileMake Nil) = 
-  Empty
-(FileMake (Cons (DefType lhs rhs) decls)) =
-  let file = (FileMake decls)
-  let name = (GetCtrName lhs)
-  let init = EntryEmpty
+// (FileEmpty U32) : File
+(FileEmpty 0) = Array.Empty
+(FileEmpty n) = (Array.Push (FileEmpty (- n 1)) EntryEmpty)
+
+(FileMake n2i (Array i2n.size i2n.tree) Nil) = 
+  λt (t n2i (Array i2n.size i2n.tree) (FileEmpty i2n.size))
+(FileMake n2i i2n (Cons (DefType lhs rhs) decls)) =
+  (PairGet (GenIds lhs n2i i2n) λn2i λi2n λlhs
+  (PairGet (GenIds rhs n2i i2n) λn2i λi2n λrhs
+  ((FileMake n2i i2n decls)     λn2i λi2n λfile
+  let ctid = (GetCtrId lhs)
   let func = λentry (EntrySetType entry (DefType lhs rhs))
-  (IniMut file (StrHash name) init func)
-(FileMake (Cons (DefRule lhs rhs) decls)) =
-  let file = (FileMake decls)
-  let name = (GetCtrName lhs)
-  let init = EntryEmpty
+  λt (t n2i i2n (Array.Mut file ctid func)))))
+(FileMake n2i i2n (Cons (DefRule lhs rhs) decls)) =
+  ((GenIds lhs n2i i2n)     λn2i λi2n λlhs
+  ((GenIds rhs n2i i2n)     λn2i λi2n λrhs
+  ((FileMake n2i i2n decls) λn2i λi2n λfile
+  let ctid = (GetCtrId lhs)
   let func = λentry (EntryAddRule entry (DefRule (CacheUses lhs rhs) rhs))
-  (IniMut file (StrHash name) init func)
+  λt (t n2i i2n (Array.Mut file ctid func)))))
 
 (CacheUses (Var name)      rhs) = (Var name (Uses name rhs))
-(CacheUses (Ctr name vars) rhs) = (Ctr name (CacheUsesMany vars rhs))
+(CacheUses (Ctr ctid vars) rhs) = (Ctr ctid (CacheUsesMany vars rhs))
 
 (CacheUsesMany Nil         rhs) = Nil
 (CacheUsesMany (Cons x xs) rhs) = (Cons (CacheUses x rhs) (CacheUsesMany xs rhs))
 
 // Stringifying
-// ============
+// ------------
 
 // (Show term:Term) : String
 (Show term) = ((ShowGo term) "")
@@ -570,9 +685,9 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
       ((ShowGo argm)
       ((ShowGoStr ")")
       x)))))
-  (ShowGo (Ctr name args)) =
+  (ShowGo (Ctr ctid args)) =
     λx((ShowGoStr "(")
-      ((ShowGoStr name)
+      ((ShowGoStr (ShowU32 ctid)) // todo: use nametable
       ((ShowGoMany args)
       ((ShowGoStr ")")
       x))))
@@ -619,7 +734,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 
 
 // Substitution
-// ============
+// ------------
 
 // Used for parse-time subst (def), NOT by the evaluator/checker!
 // (Subst String Term Term) : Term
@@ -631,7 +746,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 (Subst nm val (All name type body)) = (All name (Subst nm val type) (SubstBody nm val name body))
 (Subst nm val (Lam name body))      = (Lam name (SubstBody nm val name body))
 (Subst nm val (App func argm))      = (App (Subst nm val func) (Subst nm val argm))
-(Subst nm val (Ctr name args))      = (Ctr name (Map args λx(Subst nm val x)))
+(Subst nm val (Ctr ctid args))      = (Ctr ctid (Map args λx(Subst nm val x)))
 
 // (SubstBody String Term String Term) : Term
 (SubstBody nm val name body) = (SubstBodyGo (StrEqual nm name) nm val body)
@@ -643,11 +758,6 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 // Evaluation
 // ----------
 
-// FIXME temporary function, gets the first body of an entry
-// (GetEntryBody File String) : Term
-//(GetEntryBody file name) = (PairGet (Get file (StrHash name)) λfile λentry (GetBodyGot file entry))
-  //(GetBodyGot file (Some (NewEntry type (Cons (DefRule lhs rhs) rest)))) = rhs
-
 // Counts free occurrences of a name
 // (Uses String Term) : U32
 (Uses nm (Var name))           = (StrEqual name nm)
@@ -658,7 +768,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 (Uses nm (All name type body)) = (+ (Uses nm type) (UsesShadow (StrEqual nm name) nm body))
 (Uses nm (Lam name body))      = (UsesShadow (StrEqual nm name) nm body)
 (Uses nm (App func argm))      = (+ (Uses nm func) (Uses nm argm))
-(Uses nm (Ctr name args))      = (UsesMany nm args)
+(Uses nm (Ctr ctid args))      = (UsesMany nm args)
   (UsesMany nm Nil)            = 0
   (UsesMany nm (Cons x xs))    = (+ (Uses nm x) (UsesMany nm xs))
 (UsesShadow 0 nm body)         = (Uses nm body)
@@ -700,12 +810,12 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
     (TripleGet (HighGo func file vars) λfile λvars λfunc
     (TripleGet (HighGo argm file vars) λfile λvars λargm
     (Triple file vars (HApply func argm))))
-  (HighGo (Ctr name args) file vars) =
+  (HighGo (Ctr ctid args) file vars) =
     (TripleGet (HighGoMany args file vars) λfile λvars λargs
-      (PairGet (Get file (StrHash name))   λfile λentry
-      (HighGoRules entry name args file vars)))
-    (HighGoRules (Some (NewEntry type rules)) name args file vars) = (HRules rules (HCtr name args) file vars)
-    (HighGoRules None                         name args file vars) = (Triple file vars (HCtr name args))
+      (PairGet (Array.Got file ctid)       λfile λentry
+      (HighGoRules entry ctid args file vars)))
+    (HighGoRules (Some (NewEntry type rules)) ctid args file vars) = (HRules rules (HCtr ctid args) file vars)
+    (HighGoRules None                         ctid args file vars) = (Triple file vars (HCtr ctid args))
   (HighGo (Met hash) file vars) =
     (Triple file vars (HMet hash))
 
@@ -715,10 +825,6 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
     (TripleGet (HighGo     x  file vars) λfile λvars λhead
     (TripleGet (HighGoMany xs file vars) λfile λvars λtail
     (Triple file vars (Cons head tail))))
-
-//(Ctr "Add" [(Ctr "Succ" [(Var "x")]) (Ctr "Succ" [(Var "y")]))
-//--------------------------------------------------------------
-//(Ctr "Add" [(Ctr "Succ" [A        ]) (Ctr "Succ" [B        ]))
 
 // TODO: perhaps linearize term?
 // (HRules (List Rule) HTerm File Vars) : HTerm
@@ -730,7 +836,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 // (Match Term Term) : (Maybe (List (Pair String HTerm)))
 (HMatch a b rhs) = (MaybeMap (HMatchGo a b) λx(x Nil))
 
-  (HMatchGo (Ctr a_name a_args) (HCtr b_name b_args)) = (If (IsOne (StrEqual a_name b_name)) (HMatchGoMany a_args b_args) None)
+  (HMatchGo (Ctr a_ctid a_args) (HCtr b_ctid b_args)) = (If (IsOne (== a_ctid b_ctid)) (HMatchGoMany a_args b_args) None)
   (HMatchGo (Var a_name uses)   b)                    = (Some λx(Clone uses a_name b x))
   (HMatchGo a                   b)                    = None
 
@@ -769,9 +875,9 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
     let func = (LowGo func depth)
     let argm = (LowGo argm depth)
     (App func argm)
-  (LowGo (HCtr name args) depth) =
+  (LowGo (HCtr ctid args) depth) =
     let args = (LowGoMany args depth)
-    (Ctr name args)
+    (Ctr ctid args)
 
   (LowGoMany Nil         depth) = Nil
   (LowGoMany (Cons x xs) depth) = (Cons (LowGo x depth) (LowGoMany xs depth))
@@ -833,7 +939,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
         (Ok eqs (fbody (High file argm))))
       (InferGoApp file other argm ctx eqs) =
         (Err ["Non-function application.", other, argm, ctx])
-  (InferGo file (Ctr name args) ctx eqs) =
+  (InferGo file (Ctr ctid args) ctx eqs) =
     (Ok eqs HTyp)
       
   // (CheckGo Term Term Ctx) : (Result Unit)
@@ -944,7 +1050,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 ])
 
 (Kind2 code) =
-  let term = (ReadTerm code)
+  let term = (ReadTerm Empty Array.Empty code)
   (DebugPrintType (Infer Empty term) term)
 
 //(Main n) = (Kind2 "
@@ -1016,7 +1122,12 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 //")
 
 (Main n) =
-  let file = (ReadFile "
+  let code = "
+    (Not (True))  = (False)
+    (Not (False)) = (True)
+    (Main) = (Not (Not (Not (True))))
+  "
+  let code = "
     (Not (True))  = (False)
     (Not (False)) = (True)
 
@@ -1035,12 +1146,30 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
     (Foo (S x)) = (Add (Foo x) (Foo x))
 
     (Main) = (Foo (S (S (S (S (S (S (S (S (S (S (Z))))))))))))
-  ")
-  let term = (ReadTerm "(Main)")
+  "
+  ((ReadFile code) λn2i λi2n λfile
+  let term = (ReadTerm n2i i2n "(Main)")
   let term = (High file term)
   let term = (Low term)
   let term = (Show term)
   term
+  )
 
-// 10: 47072 -> 28191680 (598x)
-// 11: 94175 -> 56327149 (598x)
+//((ShowGo (LowGo (TripleGet (TripleGet (TripleGet
+  //(PairGet
+    //(Array.Got
+      //(Braun.Tie (Braun.Tie (Braun.Tie (Braun.Tie (Braun.Tip) (NewEntry (Pair (Var "?") (Var "?")) [(DefRule (Ctr 7 [(Var "a" 1),(Ctr 4 [])]) (Var "a")),(DefRule (Ctr 7 [(Ctr 4 []),(Var "b" 1)]) (Var "b")),(DefRule (Ctr 7 [(Ctr 6 [(Var "a" 1)]),(Ctr 6 [(Var "b" 1)])]) (Ctr 6 [(Ctr 7 [(Var "a"),(Var "b")])])),(DefRule (Ctr 7 [(Ctr 5 [(Var "a" 1)]),(Ctr 6 [(Var "b" 1)])]) (Ctr 5 [(Ctr 7 [(Var "a"),(Var "b")])])),(DefRule (Ctr 7 [(Ctr 6 [(Var "a" 1)]),(Ctr 5 [(Var "b" 1)])]) (Ctr 5 [(Ctr 7 [(Var "a"),(Var "b")])])),(DefRule (Ctr 7 [(Ctr 5 [(Var "a" 1)]),(Ctr 5 [(Var "b" 1)])]) (Ctr 3 [(Ctr 5 [(Ctr 7 [(Var "a"),(Var "b")])])]))]) (Braun.Tip)) (NewEntry (Pair (Var "?") (Var "?")) [(DefRule (Ctr 3 [(Ctr 4 [])]) (Ctr 4 [])),(DefRule (Ctr 3 [(Ctr 5 [(Var "pred" 1)])]) (Ctr 6 [(Ctr 3 [(Var "pred")])])),(DefRule (Ctr 3 [(Ctr 6 [(Var "pred" 1)])]) (Ctr 5 [(Var "pred")]))]) (Braun.Tie (Braun.Tip) (NewEntry (Pair (Var "?") (Var "?")) [(DefRule (Ctr 11 []) (Ctr 8 [(Ctr 9 [])]))]) (Braun.Tip))) (NewEntry (Pair (Var "?") (Var "?")) []) (Braun.Tie (Braun.Tie (Braun.Tip) (NewEntry (Pair (Var "?") (Var "?")) []) (Braun.Tip)) (NewEntry (Pair (Var "?") (Var "?")) []) (Braun.Tip))) (NewEntry (Pair (Var "?") (Var "?")) [(DefRule (Ctr 0 [(Ctr 1 [])]) (Ctr 2 [])),(DefRule (Ctr 0 [(Ctr 2 [])]) (Ctr 1 []))]) (Braun.Tie (Braun.Tie (Braun.Tie (Braun.Tip) (NewEntry (Pair (Var "?") (Var "?")) [(DefRule (Ctr 8 [(Ctr 9 [])]) (Ctr 5 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 6 [(Ctr 4 [])])])])])])])])])])])])])])])])])),(DefRule (Ctr 8 [(Ctr 10 [(Var "x" 2)])]) (Ctr 7 [(Ctr 8 [(Var "x")]),(Ctr 8 [(Var "x")])]))]) (Braun.Tip)) (NewEntry (Pair (Var "?") (Var "?")) []) (Braun.Tip)) (NewEntry (Pair (Var "?") (Var "?")) []) (Braun.Tie (Braun.Tie (Braun.Tip) (NewEntry (Pair (Var "?") (Var "?")) []) (Braun.Tip)) (NewEntry (Pair (Var "?") (Var "?")) []) (Braun.Tip))))
+      //9)
+    //λx1 λx2 (HighGoRules x2 9 [] x1 [])
+  //) λx3 λx4 λx5 (Triple x3 x4 [x5])) λx6 λx7 λx8 (PairGet (Array.Got x6 8) λx9 λx10 (HighGoRules x10 8 x8 x9 x7))) λ_ λ_ λx11 x11) 0)) "")
+
+//(Main n) =
+  //let arr = Array.Empty
+  //let arr = (Array.Push arr 1)
+  //let arr = (Array.Push arr 2)
+  //let arr = (Array.Push arr 3)
+  //let arr = (Array.Set arr 2 77)
+  //arr
+
+//10: 47072 -> 28191680 (598x)
+//11: 94175 -> 56327149 (598x)

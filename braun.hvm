@@ -1,0 +1,53 @@
+// (Set u0:U32 u1:U32 Braun a): Braun
+// preconditions:
+// #TODO 
+// - u0 != 0 << NOTE: what that means? is there anything missing?
+
+// Push
+(Braun.Push.go 1 o t v)                 = (Braun.Tie Braun.Tip v Braun.Tip)
+(Braun.Push.go n 0 (Braun.Tie l x r) v) = (Braun.Tie (Braun.Push.go (>> n 1) (& (>> n 1) 1) l v) x r)
+(Braun.Push.go n 1 (Braun.Tie l x r) v) = (Braun.Tie l x (Braun.Push.go (>> n 1) (& (>> n 1) 1) r v))
+(Braun.Push n t v)                      = (Braun.Push.go n (& n 1) t v)
+
+// Pop
+(Braun.Pop.go 1 o t)                 = (Braun.Tip)
+(Braun.Pop.go n 0 (Braun.Tie l x r)) = (Braun.Tie (Braun.Pop.go (>> n 1) (& (>> n 1) 1) l) x r)
+(Braun.Pop.go n 1 (Braun.Tie l x r)) = (Braun.Tie l x (Braun.Pop.go (>> n 1) (& (>> n 1) 1) r))
+
+// Get
+(Braun.Get.go 1 o (Braun.Tie l x r))   = x
+(Braun.Get.go idx 0 (Braun.Tie l x r)) = (Braun.Get.go (>> idx 1) (& (>> idx 1) 1) l)
+(Braun.Get.go idx 1 (Braun.Tie l x r)) = (Braun.Get.go (>> idx 1) (& (>> idx 1) 1) r)
+
+// Got
+(Braun.Got.go 1 o (Braun.Tie l x r)) = λt (t (Braun.Tie l x r) x)
+(Braun.Got.go i 0 (Braun.Tie l x r)) = ((Braun.Got.go (>> i 1) (& (>> i 1) 1) l) λl λv λt (t (Braun.Tie l x r) v))
+(Braun.Got.go i 1 (Braun.Tie l x r)) = ((Braun.Got.go (>> i 1) (& (>> i 1) 1) r) λr λv λt (t (Braun.Tie l x r) v))
+
+// Arrays
+(Array.Empty)                  = (Array 0 Braun.Tip)
+(Array.Push (Array n t) v)     = (Array (+ n 1) (Braun.Push.go (+ n 1) (& (+ n 1) 1) t v))
+(Array.Pop (Array n t))        = (Array (- n 1) (Braun.Pop.go n (& n 1) t))
+(Array.Get (Array size t) idx) = (Array.Get.aux (< idx size) idx t)
+  (Array.Get.aux 0 idx t)      = (None)
+  (Array.Get.aux 1 idx t)      = (Some (Braun.Get.go (+ idx 1) (& (+ idx 1) 1) t))
+(Array.Got (Array size t) idx) = (Array.Got.aux (< idx size) idx t)
+  (Array.Got.aux 0 idx t)      = (Pair t (None))
+  (Array.Got.aux 1 idx t)      = ((Braun.Got.go (+ idx 1) (& (+ idx 1) 1) t) λt λv (Pair t (Some v)))
+
+// (Array.Range U32) : Array<U32>
+(Array.Range 0) = Array.Empty
+(Array.Range n) = (Array.Push (Array.Range (- n 1)) (- n 1))
+
+(Main n) = 
+  let arr = (Range 20)
+  (Array.Got arr 10)
+
+  //let arr = Empty
+  //let arr = (Push arr 1)
+  //let arr = (Push arr 2)
+  //let arr = (Push arr 3)
+  //let arr = (Push arr 4)
+  //let arr = (Push arr 5)
+  //let arr = (Push arr 6)
+  //arr

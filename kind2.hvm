@@ -11,6 +11,8 @@
 (IsOne 0) = False
 (IsOne 1) = True
 
+(U32.If 0 t f) = f
+(U32.If 1 t f) = t
 
 
 // Bool
@@ -31,8 +33,8 @@
 
 
 
-// Pair
-// ====
+// Triple
+// ======
 
 // (TripleGet (Triple a b c) (∀a ∀b λc d)) : d
 (TripleGet (Triple x y z) fn) = (fn x y z)
@@ -80,6 +82,23 @@
 // (Concat a:(List a) b:(List a)) : (List a)
 (Concat Nil         ys) = ys
 (Concat (Cons x xs) ys) = (Cons x (Concat xs ys))
+
+
+
+// Name
+// ====
+
+// Name : Type
+// (Name str:String hash:U32) : Name
+
+(Name.Make str) = (Name str (StrHash str))
+
+(Name.GetHash (Name str hash)) = hash
+
+(Name.GetString (Name str hash)) = str
+
+(Name.Equal (Name a_str a_hash) (Name b_str b_hash)) = (== a_hash b_hash)
+
 
 
 // String
@@ -214,16 +233,6 @@ NewLine = (StrCons 10 StrNil)
   (MutGo n (Nodes lft rgt)  key fun) = (MutGoNodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt fun)
     (MutGoNodes 0 n key lft rgt fun) = (Nodes (MutGo n lft key fun) rgt)
     (MutGoNodes 1 n key lft rgt fun) = (Nodes lft (MutGo n rgt key fun))
-
-//(IniMut tree key ini fun) = (IniMutGo 32 tree key ini fun)
-  //(IniMutGo 0 (Entry x)        key ini fun) = (Entry (fun x))
-  //(IniMutGo 0 tree             key ini fun) = (Entry (fun ini))
-  //(IniMutGo n Empty            key ini fun) = (IniMutGoEmpty (& (>> key (- n 1)) 1) (- n 1) key ini fun)
-    //(IniMutGoEmpty 0 n key         ini fun) = (Nodes (IniMutGo n Empty key ini fun) Empty)
-    //(IniMutGoEmpty 1 n key         ini fun) = (Nodes Empty (IniMutGo n Empty key ini fun))
-  //(IniMutGo n (Nodes lft rgt)  key ini fun) = (IniMutGoNodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt ini fun)
-    //(IniMutGoNodes 0 n key lft rgt ini fun) = (Nodes (IniMutGo n lft key ini fun) rgt)
-    //(IniMutGoNodes 1 n key lft rgt ini fun) = (Nodes lft (IniMutGo n rgt key ini fun))
 
 (ListToMap list) = (ListToMapGo list Empty)
   (ListToMapGo (Cons (Pair key val) xs) map) = (ListToMapGo xs (Set map key val))
@@ -391,7 +400,7 @@ ParseEnd = λcode (ParseEndGo code)
 // (ParseVar) : (Parser (Maybe Term))
 (ParseVar) = (Bind ParseName λname (ParseVar_0 name))
   (ParseVar_0 StrNil        ) = (Done None)
-  (ParseVar_0 (StrCons x xs)) = (Done (Some (Var (StrCons x xs))))
+  (ParseVar_0 (StrCons x xs)) = (Done (Some (Var (Name.Make (StrCons x xs)))))
 
 // (ParseTyp) : (Parse (Maybe Term))
 (ParseTyp) = (Guard (MatchText "Type")
@@ -407,7 +416,7 @@ ParseEnd = λcode (ParseEndGo code)
 
 // (ParseDef) : (Parser (Maybe Term))
 (ParseDef) = (Guard (MatchText "def ")
-  (Bind ParseName   λname
+  (Bind ParseName       λname
   (Bind (MatchText ":") λanns
   (ParseDefAnn anns name))))
 (ParseDefAnn True name) =
@@ -415,12 +424,12 @@ ParseEnd = λcode (ParseEndGo code)
   (Bind (ParseText "=") λskip
   (Bind ParseTerm       λexpr
   (Bind ParseTerm       λbody
-  (Done (Subst name (Ann expr type) body))))))
+  (Done (Subst (Name.Make name) (Ann expr type) body))))))
 (ParseDefAnn False name) =
   (Bind (ParseText "=") λskip
   (Bind ParseTerm       λexpr
   (Bind ParseTerm       λbody
-  (Done (Subst name expr body)))))
+  (Done (Subst (Name.Make name) expr body)))))
 
 // (ParseLet) : (Parser (Maybe Term))
 (ParseLet) = (Guard (MatchText "let ")
@@ -432,12 +441,12 @@ ParseEnd = λcode (ParseEndGo code)
   (Bind (ParseText "=") λskip
   (Bind ParseTerm       λexpr
   (Bind ParseTerm       λbody
-  (Done (Let name (Ann expr type) body))))))
+  (Done (Let (Name.Make name) (Ann expr type) body))))))
 (ParseLetAnn False name) =
   (Bind (ParseText "=") λskip
   (Bind ParseTerm       λexpr
   (Bind ParseTerm       λbody
-  (Done (Let name expr body)))))
+  (Done (Let (Name.Make name) expr body)))))
 
 // (ParseAll) : (Parse (Maybe Term))
 (ParseAll) = (Guard (MatchText "∀")
@@ -447,13 +456,13 @@ ParseEnd = λcode (ParseEndGo code)
   (Bind ParseTerm        λtype
   (Bind (ParseText ")")  λskip
   (Bind ParseTerm        λbody
-  (Done (All name type body)))))))))
+  (Done (All (Name.Make name) type body)))))))))
 
 // (ParseLam) : (Parser (Maybe Term))
 (ParseLam) = (Guard (MatchText "λ")
   (Bind ParseName λname
   (Bind ParseTerm λbody
-  (Done (Lam name body)))))
+  (Done (Lam (Name.Make name) body)))))
 
 // (ParseApp) : (Parser (Maybe Term)) 
 (ParseApp) = (Guard (MatchText "(")
@@ -506,14 +515,14 @@ ParseEnd = λcode (ParseEndGo code)
   λcode((ParseEnd) (SkipSpaces code))
   ParseDecl)
 
-// (ReadTerm NameToId IdToName String) : Term
+// (ReadTerm NameTable String) : Term
 (ReadTerm ntab code) = ((Finalize (ReadTermGot ((ParseTerm) code)) ntab) λntab λterm term)
   (ReadTermGot (Parsed code term)) = term
   (ReadTermGot (Failed err))       = (Var (StrConcat "[ParseError] " err))
 
 // (ReadFile String) : (Tuple NameTable File)
 (ReadFile code) = (ReadFileGot ((ParseDecls) code))
-  (ReadFileGot (Parsed code decls)) = (FileMake NameTable.Empty decls)
+  (ReadFileGot (Parsed code decls)) = (File.Make NameTable.Empty decls)
   (ReadFileGot (Failed err))        = (StrConcat "[ParseError] " err) // FIXME ill-typed
 
 
@@ -579,11 +588,11 @@ NameTable.Empty = (NameTable Empty Array.Empty)
   λt (t ntab (Cons head tail))))
 
 // TODO: missing arities, up to 16
-(Ctr.Make name Nil)                                     = (Ct0 name)
-(Ctr.Make name (Cons a Nil))                            = (Ct1 name a)
-(Ctr.Make name (Cons a (Cons b Nil)))                   = (Ct2 name a b)
-(Ctr.Make name (Cons a (Cons b (Cons c Nil))))          = (Ct3 name a b c)
-(Ctr.Make name (Cons a (Cons b (Cons c (Cons d Nil))))) = (Ct4 name a b c d)
+(Ctr.Make ctid Nil)                                     = (Ct0 ctid)
+(Ctr.Make ctid (Cons a Nil))                            = (Ct1 ctid a)
+(Ctr.Make ctid (Cons a (Cons b Nil)))                   = (Ct2 ctid a b)
+(Ctr.Make ctid (Cons a (Cons b (Cons c Nil))))          = (Ct3 ctid a b c)
+(Ctr.Make ctid (Cons a (Cons b (Cons c (Cons d Nil))))) = (Ct4 ctid a b c d)
 
 // (Ctr.GetId Term) : U32
 (Ctr.GetId (Ct0 ctid))         = ctid
@@ -593,22 +602,13 @@ NameTable.Empty = (NameTable Empty Array.Empty)
 (Ctr.GetId (Ct4 ctid a b c d)) = ctid
 (Ctr.GetId term)               = 0
 
-// Annotates the usage count of each variable in a lhs-pattern.
-// (Ctr.CacheUses Term Term) : Term
-(Ctr.CacheUses (Var name)         rhs) = (Var name (Uses name rhs))
-(Ctr.CacheUses (Ct0 ctid)         rhs) = (Ct0 ctid)
-(Ctr.CacheUses (Ct1 ctid a)       rhs) = (Ct1 ctid (Ctr.CacheUses a rhs))
-(Ctr.CacheUses (Ct2 ctid a b)     rhs) = (Ct2 ctid (Ctr.CacheUses a rhs) (Ctr.CacheUses b rhs))
-(Ctr.CacheUses (Ct3 ctid a b c)   rhs) = (Ct3 ctid (Ctr.CacheUses a rhs) (Ctr.CacheUses b rhs) (Ctr.CacheUses c rhs))
-(Ctr.CacheUses (Ct4 ctid a b c d) rhs) = (Ct4 ctid (Ctr.CacheUses a rhs) (Ctr.CacheUses b rhs) (Ctr.CacheUses c rhs) (Ctr.CacheUses d rhs))
-
 
 // File
 // ----
 
 // type Decl {
 //   DefType(lhs:Term, rhs:Term)
-//   DefRule(lhs:Term, rhs:Term)
+//   DefRule(lhs:LHS, rhs:Term)
 // }
 
 // data Type {
@@ -629,37 +629,47 @@ NameTable.Empty = (NameTable Empty Array.Empty)
 // type File = Array Entry
 
 // EntryEmpty : Entry
-EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
+EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
 
 // (EntrySetType entry:Entry new_type:Type) : Entry
-(EntrySetType (NewEntry type rules) new_type) = (NewEntry new_type rules)
+(EntrySetType (Entry type rules) new_type) = (Entry new_type rules)
 
-// (EntrySetType entry:Entry new_rule:Rule) : Entry
-(EntryAddRule (NewEntry type rules) new_rule) = (NewEntry type (Cons new_rule rules))
+// (EntrySetType entry:Entry lhs:Term rhs:Term) : Entry
+(EntryAddRule (Entry type rules) lhs rhs) = (Entry type (Rule lhs rhs rules))
 
 // (FileEmpty U32) : File
 (FileEmpty 0) = Array.Empty
 (FileEmpty n) = (Array.Push (FileEmpty (- n 1)) EntryEmpty)
 
-// (FileMake NameTable (List Decl)) : File
-(FileMake (NameTable n2i (Array i2n.size i2n.tree)) Nil) = 
+// (File.Make NameTable (List Decl)) : File
+(File.Make (NameTable n2i (Array i2n.size i2n.tree)) Nil) = 
   λt (t (NameTable n2i (Array i2n.size i2n.tree)) (FileEmpty i2n.size))
-(FileMake (NameTable n2i i2n) (Cons (DefType lhs rhs) decls)) =
+(File.Make (NameTable n2i i2n) (Cons (DefType lhs rhs) decls)) =
   let ntab = (NameTable n2i i2n)
   (PairGet (Finalize lhs ntab) λntab λlhs
   (PairGet (Finalize rhs ntab) λntab λrhs
-  ((FileMake ntab decls)     λntab λfile
+  ((File.Make ntab decls)     λntab λfile
   let ctid = (Ctr.GetId lhs)
   let func = λentry (EntrySetType entry (DefType lhs rhs))
   λt (t ntab (Array.Mut file ctid func)))))
-(FileMake (NameTable n2i i2n) (Cons (DefRule lhs rhs) decls)) =
+(File.Make (NameTable n2i i2n) (Cons (DefRule lhs rhs) decls)) =
   let ntab = (NameTable n2i i2n)
   ((Finalize lhs ntab)     λntab λlhs
   ((Finalize rhs ntab)     λntab λrhs
-  ((FileMake ntab decls) λntab λfile
+  ((File.Make ntab decls) λntab λfile
   let ctid = (Ctr.GetId lhs)
-  let func = λentry (EntryAddRule entry (DefRule (Ctr.CacheUses lhs rhs) rhs))
+  let func = λentry (EntryAddRule entry (File.Make.LHS lhs rhs) rhs)
   λt (t ntab (Array.Mut file ctid func)))))
+
+// Builds the left-hand side of a rule, annotating variable usage counts.
+// TODO: use different constructor names
+// (File.Make.LHS Term Term) : Term
+(File.Make.LHS (Var name)         rhs) = (LHS.Var name (Uses name rhs))
+(File.Make.LHS (Ct0 ctid)         rhs) = (LHS.Ct0 ctid)
+(File.Make.LHS (Ct1 ctid a)       rhs) = (LHS.Ct1 ctid (File.Make.LHS a rhs))
+(File.Make.LHS (Ct2 ctid a b)     rhs) = (LHS.Ct2 ctid (File.Make.LHS a rhs) (File.Make.LHS b rhs))
+(File.Make.LHS (Ct3 ctid a b c)   rhs) = (LHS.Ct3 ctid (File.Make.LHS a rhs) (File.Make.LHS b rhs) (File.Make.LHS c rhs))
+(File.Make.LHS (Ct4 ctid a b c d) rhs) = (LHS.Ct4 ctid (File.Make.LHS a rhs) (File.Make.LHS b rhs) (File.Make.LHS c rhs) (File.Make.LHS d rhs))
 
 // Stringifying
 // ------------
@@ -667,7 +677,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 // (Show term:Term) : String
 (Show term) = ((ShowGo term) "")
   (ShowGo (Var name)) =
-    λx((ShowGoStr name)
+    λx((ShowGoStr (Name.GetString name))
       x)
   (ShowGo (Met hash)) =
     λx((ShowGoStr "_")
@@ -675,7 +685,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
       x))
   (ShowGo (Let name expr body)) =
     λx((ShowGoStr "let ")
-      ((ShowGoStr name)
+      ((ShowGoStr (Name.GetString name))
       ((ShowGoStr " = ")
       ((ShowGo expr)
       ((ShowGoStr "; ")
@@ -693,7 +703,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
       x)
   (ShowGo (All name type body)) =
     λx((ShowGoStr "∀(")
-      ((ShowGoStr name)
+      ((ShowGoStr (Name.GetString name))
       ((ShowGoStr ": ")
       ((ShowGo type)
       ((ShowGoStr ") ")
@@ -701,7 +711,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
       x))))))
   (ShowGo (Lam name body)) =
     λx((ShowGoStr "λ")
-      ((ShowGoStr name)
+      ((ShowGoStr (Name.GetString name))
       ((ShowGoStr " ")
       ((ShowGo body)
       x))))
@@ -780,10 +790,10 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 
 // (ShowSubst Subst) : String
 (ShowSubst Nil) = ""
-(ShowSubst (Cons (Pair name value) subst)) =
+(ShowSubst (Cons (Pair skey value) subst)) =
   (StrFlatten [
     "- "
-    (ShowU32 name)
+    (ShowU32 skey)
     " <- "
     (Show (Low value))
     NewLine
@@ -797,7 +807,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 
 // Used for parse-time subst (def), NOT by the evaluator/checker!
 // (Subst String Term Term) : Term
-(Subst nm val (Var name))           = (If (IsOne (StrEqual name nm)) val (Var name))
+(Subst nm val (Var name))           = (U32.If (Name.Equal name nm) val (Var name))
 (Subst nm val (Met hash))           = (Met hash)
 (Subst nm val Typ)                  = Typ
 (Subst nm val (Ann xval xtyp))      = (Ann (Subst nm val xval) (Subst nm val xtyp))
@@ -812,7 +822,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 (Subst nm val (Ct4 ctid a b c d))   = (Ct4 ctid (Subst nm val a) (Subst nm val b) (Subst nm val c) (Subst nm val d))
 
 // (SubstBody String Term String Term) : Term
-(SubstBody nm val name body) = (SubstBodyGo (StrEqual nm name) nm val body)
+(SubstBody nm val name body) = (SubstBodyGo (Name.Equal nm name) nm val body)
   (SubstBodyGo 0 nm val body) = (Subst nm val body)
   (SubstBodyGo 1 nm val body) = body
 
@@ -822,13 +832,13 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 
 // Counts free occurrences of a name
 // (Uses String Term) : U32
-(Uses nm (Var name))           = (StrEqual name nm)
+(Uses nm (Var name))           = (Name.Equal name nm)
 (Uses nm (Met hash))           = 0
 (Uses nm Typ)                  = 0
 (Uses nm (Ann xval xtyp))      = (Uses nm xval)
-(Uses nm (Let name expr body)) = (+ (Uses nm expr) (UsesShadow (StrEqual nm name) nm body))
-(Uses nm (All name type body)) = (+ (Uses nm type) (UsesShadow (StrEqual nm name) nm body))
-(Uses nm (Lam name body))      = (UsesShadow (StrEqual nm name) nm body)
+(Uses nm (Let name expr body)) = (+ (Uses nm expr) (UsesShadow (Name.Equal nm name) nm body))
+(Uses nm (All name type body)) = (+ (Uses nm type) (UsesShadow (Name.Equal nm name) nm body))
+(Uses nm (Lam name body))      = (UsesShadow (Name.Equal nm name) nm body)
 (Uses nm (App func argm))      = (+ (Uses nm func) (Uses nm argm))
 (Uses nm (Ct0 ctid))           = 0
 (Uses nm (Ct1 ctid a))         = (Uses nm a)
@@ -845,16 +855,18 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 (Clone n name term ctx) = (Cons (Pair name term) (Clone (- n 1) name term ctx))
 
 // Converts a term to high-order
-// TODO linearize file
 // (High file:File term:Term) : HTerm
 (High file term) = (TripleGet (HighGo term file Nil) λfile λvars λterm term)
 
   // (HighGo file:File term:Term file:File vars:(List (Pair String HTerm))) : (Triple File (List (Pair String HTerm)) HTerm)
+  
   (HighGo (Var name) file vars) = (HighFind name file vars)
     (HighFind name file Nil) = (Triple file Nil (HVar name))
-    (HighFind name file (Cons (Pair var val) vars)) = (HighFound (StrEqual name var) name var val file vars)
+    (HighFind name file (Cons (Pair var val) vars)) = (HighFound (Name.Equal name var) name var val file vars)
       (HighFound 1 name var val file vars) = (Triple file vars val)
-      (HighFound 0 name var val file vars) = (TripleGet (HighFind name file vars) λfile λvars λgot (Triple file (Cons (Pair var val) vars) got))
+      (HighFound 0 name var val file vars) =
+        (TripleGet (HighFind name file vars) λfile λvars λgot
+        (Triple file (Cons (Pair var val) vars) got))
 
   (HighGo (Ann xval xtyp) file vars) =
     (HighGo xval file vars)
@@ -882,39 +894,26 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
     (Triple file vars (HApply func argm))))
 
   (HighGo (Ct0 ctid) file vars) =
-
     (PairGet (Array.Got file ctid) λfile λentry
-    (HighGo.Ct0 entry ctid file vars))
-
-    (HighGo.Ct0 None                         ctid file vars) = (Triple file vars (HCt0 ctid))
-    (HighGo.Ct0 (Some (NewEntry type rules)) ctid file vars) = (HFindMatchingRule rules (HCt0 ctid) file vars)
+    (HighGo.Ctr entry (HCt0 ctid) file vars))
 
   (HighGo (Ct1 ctid a) file vars) =
     (PairGet (Array.Got file ctid) λfile λentry
     (TripleGet (HighGo a file vars) λfile λvars λa
-    (HighGo.Ct1 entry ctid a file vars)))
-
-    (HighGo.Ct1 None                         ctid a file vars) = (Triple file vars (HCt1 ctid a))
-    (HighGo.Ct1 (Some (NewEntry type rules)) ctid a file vars) = (HFindMatchingRule rules (HCt1 ctid a) file vars)
+    (HighGo.Ctr entry (HCt1 ctid a) file vars)))
 
   (HighGo (Ct2 ctid a b) file vars) =
     (PairGet (Array.Got file ctid) λfile λentry
     (TripleGet (HighGo a file vars) λfile λvars λa
     (TripleGet (HighGo b file vars) λfile λvars λb
-    (HighGo.Ct2 entry ctid a b file vars))))
-
-    (HighGo.Ct2 None                         ctid a b file vars) = (Triple file vars (HCt2 ctid a b))
-    (HighGo.Ct2 (Some (NewEntry type rules)) ctid a b file vars) = (HFindMatchingRule rules (HCt2 ctid a b) file vars)
+    (HighGo.Ctr entry (HCt2 ctid a b) file vars))))
 
   (HighGo (Ct3 ctid a b c) file vars) =
     (PairGet (Array.Got file ctid) λfile λentry
     (TripleGet (HighGo a file vars) λfile λvars λa
     (TripleGet (HighGo b file vars) λfile λvars λb
     (TripleGet (HighGo c file vars) λfile λvars λc
-    (HighGo.Ct3 entry ctid a b c file vars)))))
-
-    (HighGo.Ct3 None                         ctid a b c file vars) = (Triple file vars (HCt3 ctid a b c))
-    (HighGo.Ct3 (Some (NewEntry type rules)) ctid a b c file vars) = (HFindMatchingRule rules (HCt3 ctid a b c) file vars)
+    (HighGo.Ctr entry (HCt3 ctid a b c) file vars)))))
 
   (HighGo (Ct4 ctid a b c d) file vars) =
     (PairGet (Array.Got file ctid) λfile λentry
@@ -922,18 +921,19 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
     (TripleGet (HighGo b file vars) λfile λvars λb
     (TripleGet (HighGo c file vars) λfile λvars λc
     (TripleGet (HighGo d file vars) λfile λvars λd
-    (HighGo.Ct4 entry ctid a b c d file vars))))))
+    (HighGo.Ctr entry (HCt4 ctid a b c d) file vars))))))
 
-    (HighGo.Ct4 None                         ctid a b c d file vars) = (Triple file vars (HCt4 ctid a b c d))
-    (HighGo.Ct4 (Some (NewEntry type rules)) ctid a b c d file vars) = (HFindMatchingRule rules (HCt4 ctid a b c d) file vars)
+  (HighGo.Ctr None                      term file vars) = (Triple file vars term)
+  (HighGo.Ctr (Some (Entry type rules)) term file vars) = (HFindMatchingRule rules term file vars)
 
   (HighGo (Met hash) file vars) =
     (Triple file vars (HMet hash))
 
+
 // TODO: perhaps linearize term?
 // (HFindMatchingRule (List Rule) HTerm File Vars) : HTerm
-(HFindMatchingRule Nil                            term file vars) = (Triple file vars term)
-(HFindMatchingRule (Cons (DefRule lhs rhs) rules) term file vars) = (HFindMatchingRule.Found (HMatch.Go lhs term) rhs rules term file vars)
+(HFindMatchingRule End                  term file vars) = (Triple file vars term)
+(HFindMatchingRule (Rule lhs rhs rules) term file vars) = (HFindMatchingRule.Found (HMatch.Go lhs term) rhs rules term file vars)
   (HFindMatchingRule.Found None        rhs rules term file vars) = (HFindMatchingRule rules term file vars)
   (HFindMatchingRule.Found (Some subs) rhs rules term file vars) = (HighGo rhs file (subs vars))
 
@@ -941,25 +941,25 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 // (Match Term HTerm) : (Maybe (List (Pair String HTerm)))
 (HMatch x y) = (MaybeMap (HMatch.Go x y) λz(z Nil))
 
-  (HMatch.Go (Ct0 x.ctid) (HCt0 y.ctid)) = (HMatch.Go.Ct0 (== x.ctid y.ctid))
+  (HMatch.Go (LHS.Ct0 x.ctid) (HCt0 y.ctid)) = (HMatch.Go.Ct0 (== x.ctid y.ctid))
     (HMatch.Go.Ct0 0) = None
     (HMatch.Go.Ct0 1) =
       (Some λz(z))
 
-  (HMatch.Go (Ct1 x.ctid x.a) (HCt1 y.ctid y.a)) = (HMatch.Go.Ct1 (== x.ctid y.ctid) x.a y.a)
+  (HMatch.Go (LHS.Ct1 x.ctid x.a) (HCt1 y.ctid y.a)) = (HMatch.Go.Ct1 (== x.ctid y.ctid) x.a y.a)
     (HMatch.Go.Ct1 0 x.a y.a) = None
     (HMatch.Go.Ct1 1 x.a y.a) =
       (Perhaps (HMatch.Go x.a y.a) λas
       (Some λz(as z)))
 
-  (HMatch.Go (Ct2 x.ctid x.a x.b) (HCt2 y.ctid y.a y.b)) = (HMatch.Go.Ct2 (== x.ctid y.ctid) x.a x.b y.a y.b)
+  (HMatch.Go (LHS.Ct2 x.ctid x.a x.b) (HCt2 y.ctid y.a y.b)) = (HMatch.Go.Ct2 (== x.ctid y.ctid) x.a x.b y.a y.b)
     (HMatch.Go.Ct2 0 x.a x.b y.a y.b) = None
     (HMatch.Go.Ct2 1 x.a x.b y.a y.b) =
       (Perhaps (HMatch.Go x.a y.a) λas
       (Perhaps (HMatch.Go x.b y.b) λbs
       (Some λz(as (bs z)))))
 
-  (HMatch.Go (Ct3 x.ctid x.a x.b x.c) (HCt3 y.ctid y.a y.b y.c)) = (HMatch.Go.Ct3 (== x.ctid y.ctid) x.a x.b x.c y.a y.b y.c)
+  (HMatch.Go (LHS.Ct3 x.ctid x.a x.b x.c) (HCt3 y.ctid y.a y.b y.c)) = (HMatch.Go.Ct3 (== x.ctid y.ctid) x.a x.b x.c y.a y.b y.c)
     (HMatch.Go.Ct3 0 x.a x.b x.c y.a y.b y.c) = None
     (HMatch.Go.Ct3 1 x.a x.b x.c y.a y.b y.c) =
       (Perhaps (HMatch.Go x.a y.a) λas
@@ -967,7 +967,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
       (Perhaps (HMatch.Go x.c y.c) λcs
       (Some λz(as (bs (cs z)))))))
 
-  (HMatch.Go (Ct4 x.ctid x.a x.b x.c x.d) (HCt4 y.ctid y.a y.b y.c y.d)) = (HMatch.Go.Ct4 (== x.ctid y.ctid) x.a x.b x.c x.d y.a y.b y.c y.d)
+  (HMatch.Go (LHS.Ct4 x.ctid x.a x.b x.c x.d) (HCt4 y.ctid y.a y.b y.c y.d)) = (HMatch.Go.Ct4 (== x.ctid y.ctid) x.a x.b x.c x.d y.a y.b y.c y.d)
     (HMatch.Go.Ct4 0 x.a x.b x.c x.d y.a y.b y.c y.d) = None
     (HMatch.Go.Ct4 1 x.a x.b x.c x.d y.a y.b y.c y.d) =
       (Perhaps (HMatch.Go x.a y.a) λas
@@ -976,7 +976,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
       (Perhaps (HMatch.Go x.d y.d) λds
       (Some λz(as (bs (cs (ds z)))))))))
 
-  (HMatch.Go (Var a_name uses) b) =
+  (HMatch.Go (LHS.Var a_name uses) b) =
     (Some λz(Clone uses a_name b z))
 
   (HMatch.Go a b) = None
@@ -998,13 +998,13 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
     Typ
 
   (LowGo (HAll type body) depth) =
-    let name = (StrCons (+ 97 depth) StrNil)
+    let name = (Name.Make (StrCons (+ 97 depth) StrNil))
     let type = (LowGo type depth)
     let body = (LowGo (body (HVar name)) (+ depth 1))
     (All name type body)
 
   (LowGo (HLam body) depth) =
-    let name = (StrCons (+ 97 depth) StrNil)
+    let name = (Name.Make (StrCons (+ 97 depth) StrNil))
     let type = Typ
     let body = (LowGo (body (HVar name)) (+ depth 1))
     (Lam name body)
@@ -1069,7 +1069,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
   // TODO: linearize file? probably not needed
   (InferGo file (Var name) ctx eqs) = (InferGoFind name ctx eqs)
     (InferGoFind name Nil eqs) = (Err (StrConcat "Unbound: " name))
-    (InferGoFind name (Cons (Pair var typ) ctx) eqs) = (InferGoFound (StrEqual name var) name typ ctx eqs)
+    (InferGoFind name (Cons (Pair var typ) ctx) eqs) = (InferGoFound (Name.Equal name var) name typ ctx eqs)
       (InferGoFound 1 name typ ctx eqs) = (Ok eqs typ)
       (InferGoFound 0 name typ ctx eqs) = (InferGoFind name ctx eqs)
 
@@ -1324,7 +1324,8 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
 
     (Main) = (Foo (S (S (S (S (S (S (S (S (S (S (Z))))))))))))
   "
-
+  //(Main) = (λf λx (f (f (f (f x)))) λf λx (f (f (f (f x)))))
+  
   ((ReadFile code) λntab λfile
   let term = (ReadTerm ntab "(Main)")
   let term = (High file term)
@@ -1332,5 +1333,7 @@ EntryEmpty = (NewEntry (Pair (Var "?") (Var "?")) [])
   let term = (Show term)
   term)
 
-//
-//8589622 / 23521
+// 7981162 / 23521
+// 8157098 / 23521
+// 8589622 / 23521
+// 4^4 = 102m rewrites

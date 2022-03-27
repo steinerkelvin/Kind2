@@ -1191,7 +1191,7 @@ EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
 (Equal (HVal a_numb) (HVal b_numb) depth subst) =
   (Pair subst (== a_numb b_numb))
 (Equal (HVar a_name) (HVar b_name) depth subst) =
-  (Pair subst (StrEqual a_name b_name))
+  (Pair subst (Name.Equal a_name b_name))
 (Equal HTyp HTyp depth subst) =
   (Pair subst 1)
 (Equal (HAll a_type a_body) (HAll b_type b_body) depth subst) =
@@ -1284,108 +1284,108 @@ EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
 ])
 
 (Kind2 code) =
-  let term = (ReadTerm Empty Array.Empty code)
+  let term = (ReadTerm (NameTable Empty Array.Empty) code)
   (DebugPrintType (Infer Empty term) term)
 
-//(Main n) = (Kind2 "
-  //def id : ∀(a: Type) ∀(x: a) a = λa λx x
+(Main n) = (Kind2 "
+  def id : ∀(a: Type) ∀(x: a) a = λa λx x
 
-  //def equal : ∀(t: Type) ∀(a: t) ∀(b: t) Type = λt λa λb ∀ (p: ∀(b: t) Type) ∀ (r: (p a)) (p b)
-  //def refl : ∀(t: Type) ∀(a: t) (((equal t) a) a) = λt λa λp λr r
+  def equal : ∀(t: Type) ∀(a: t) ∀(b: t) Type = λt λa λb ∀ (p: ∀(b: t) Type) ∀ (r: (p a)) (p b)
+  def refl : ∀(t: Type) ∀(a: t) (((equal t) a) a) = λt λa λp λr r
 
-  //def bool : Type = ∀(p: Type) ∀(t: p) ∀(f: p) p
-  //def true : bool = λp λt λf t
-  //def false : bool = λp λt λf f
-  //def not : ∀(b: bool) bool = λb λp λt λf (((b p) f) t)
-  //def xor : ∀(a: bool) ∀(b: bool) bool = λa (((a Type) not) λb b)
+  def bool : Type = ∀(p: Type) ∀(t: p) ∀(f: p) p
+  def true : bool = λp λt λf t
+  def false : bool = λp λt λf f
+  def not : ∀(b: bool) bool = λb λp λt λf (((b p) f) t)
+  def xor : ∀(a: bool) ∀(b: bool) bool = λa (((a Type) not) λb b)
 
-  //def nat : Type = ∀(p: Type) ∀(s: ∀(n: p) p) ∀(z: p) p
-  //def zero : nat = λp λs λz z
-  //def succ : ∀(n: nat) nat = λn λp λs λz (s (((n p) s) z))
-  //def mul : ∀(n: nat) ∀(n: nat) nat = λn λm λp λs λz (((n p) ((m p) s)) z)
-  //def exp : ∀(n: nat) ∀(n: nat) nat = λn λm λp ((m ∀(x:p) p) (n p))
+  def nat : Type = ∀(p: Type) ∀(s: ∀(n: p) p) ∀(z: p) p
+  def zero : nat = λp λs λz z
+  def succ : ∀(n: nat) nat = λn λp λs λz (s (((n p) s) z))
+  def mul : ∀(n: nat) ∀(n: nat) nat = λn λm λp λs λz (((n p) ((m p) s)) z)
+  def exp : ∀(n: nat) ∀(n: nat) nat = λn λm λp ((m ∀(x:p) p) (n p))
 
-  //def list : ∀(a: Type) Type = λa ∀(p: Type) ∀(nil: p) ∀(cons: ∀(x: a) ∀(xs: p) p) p
-  //def nil : ∀(a: Type) (list a) = λa λp λnil λcons nil
-  //def cons : ∀(a: Type) ∀(x: a) ∀(xs: (list a)) (list a) = λa λx λxs λp λnil λcons ((cons x) (((xs p) nil) cons))
+  def list : ∀(a: Type) Type = λa ∀(p: Type) ∀(nil: p) ∀(cons: ∀(x: a) ∀(xs: p) p) p
+  def nil : ∀(a: Type) (list a) = λa λp λnil λcons nil
+  def cons : ∀(a: Type) ∀(x: a) ∀(xs: (list a)) (list a) = λa λx λxs λp λnil λcons ((cons x) (((xs p) nil) cons))
 
-  //def n0  : nat = zero
-  //def n1  : nat = (succ n0)
-  //def n2  : nat = (succ n1)
-  //def n3  : nat = (succ n2)
-  //def n4  : nat = (succ n3)
-  //def n5  : nat = (succ n4)
-  //def n6  : nat = (succ n5)
-  //def n7  : nat = (succ n6)
-  //def n8  : nat = (succ n7)
-  //def n9  : nat = (succ n8)
-  //def n10 : nat = (succ n9)
-  //def n11 : nat = (succ n10)
-  //def n12 : nat = (succ n11)
-  //def n13 : nat = (succ n12)
-  //def n14 : nat = (succ n13)
-  //def n15 : nat = (succ n14)
-  //def n16 : nat = (succ n15)
-  //def n17 : nat = (succ n16)
-  //def n18 : nat = (succ n17)
-  //def n19 : nat = (succ n18)
-  //def n20 : nat = (succ n19)
-  //def n21 : nat = (succ n20)
-  //def n22 : nat = (succ n21)
-  //def n23 : nat = (succ n22)
-  //def n24 : nat = (succ n23)
-  //def n25 : nat = (succ n24)
-  //def n26 : nat = (succ n25)
-  //def n27 : nat = (succ n26)
-  //def n28 : nat = (succ n27)
-  //def n29 : nat = (succ n28)
-  //def n30 : nat = (succ n29)
-  //def n31 : nat = (succ n30)
-  //def n32 : nat = (succ n31)
+  def n0  : nat = zero
+  def n1  : nat = (succ n0)
+  def n2  : nat = (succ n1)
+  def n3  : nat = (succ n2)
+  def n4  : nat = (succ n3)
+  def n5  : nat = (succ n4)
+  def n6  : nat = (succ n5)
+  def n7  : nat = (succ n6)
+  def n8  : nat = (succ n7)
+  def n9  : nat = (succ n8)
+  def n10 : nat = (succ n9)
+  def n11 : nat = (succ n10)
+  def n12 : nat = (succ n11)
+  def n13 : nat = (succ n12)
+  def n14 : nat = (succ n13)
+  def n15 : nat = (succ n14)
+  def n16 : nat = (succ n15)
+  def n17 : nat = (succ n16)
+  def n18 : nat = (succ n17)
+  def n19 : nat = (succ n18)
+  def n20 : nat = (succ n19)
+  def n21 : nat = (succ n20)
+  def n22 : nat = (succ n21)
+  def n23 : nat = (succ n22)
+  def n24 : nat = (succ n23)
+  def n25 : nat = (succ n24)
+  def n26 : nat = (succ n25)
+  def n27 : nat = (succ n26)
+  def n28 : nat = (succ n27)
+  def n29 : nat = (succ n28)
+  def n30 : nat = (succ n29)
+  def n31 : nat = (succ n30)
+  def n32 : nat = (succ n31)
 
-  //def slow : ∀(n: nat) bool = λn (((n bool) λr((xor r) r)) true)
-  //def blow : ∀(n: nat) bool = λn ((((n Type) λrλb((xor (r b)) (r (not b)))) λx x) true)
+  def slow : ∀(n: nat) bool = λn (((n bool) λr((xor r) r)) true)
+  def blow : ∀(n: nat) bool = λn ((((n Type) λrλb((xor (r b)) (r (not b)))) λx x) true)
 
-  //def the : ∀(a: Type) ∀(n: a) Type = λa λn ∀ (p: ∀(n: a) Type) ∀ (r: ∀(n: a) (p n)) (p n)
-  //def val : ∀(a: Type) ∀(n: a) ((the a) n) = λa λn λp λr (r n)
+  def the : ∀(a: Type) ∀(n: a) Type = λa λn ∀ (p: ∀(n: a) Type) ∀ (r: ∀(n: a) (p n)) (p n)
+  def val : ∀(a: Type) ∀(n: a) ((the a) n) = λa λn λp λr (r n)
 
-  //def test0 : ((the _a) true) =
-    //((val _b) true)
+  def test0 : ((the _a) true) =
+    ((val _b) true)
 
-  //test0
-//")
+  test0
+")
 
-(Main n) =
-  let code = "
-    (Main) = (Not (Not (Not (True))))
-  "
-  let code = "
-    (Not (True))  = (False)
-    (Not (False)) = (True)
+//(Main n) =
+  //let code = "
+    //(Main) = (Not (Not (Not (True))))
+  //"
+  //let code = "
+    //(Not (True))  = (False)
+    //(Not (False)) = (True)
 
-    (Inc (E))      = (E)
-    (Inc (I pred)) = (O (Inc pred))
-    (Inc (O pred)) = (I pred)
+    //(Inc (E))      = (E)
+    //(Inc (I pred)) = (O (Inc pred))
+    //(Inc (O pred)) = (I pred)
 
-    (Add a     (E)  ) = a
-    (Add (E)   b    ) = b
-    (Add (O a) (O b)) = (O (Add a b))
-    (Add (I a) (O b)) = (I (Add a b))
-    (Add (O a) (I b)) = (I (Add a b))
-    (Add (I a) (I b)) = (Inc (I (Add a b)))
+    //(Add a     (E)  ) = a
+    //(Add (E)   b    ) = b
+    //(Add (O a) (O b)) = (O (Add a b))
+    //(Add (I a) (O b)) = (I (Add a b))
+    //(Add (O a) (I b)) = (I (Add a b))
+    //(Add (I a) (I b)) = (Inc (I (Add a b)))
 
-    (Foo (Z))   = (I (O (O (O (O (O (O (O (O (O (O (O (O (O (O (O (E)))))))))))))))))
-    (Foo (S x)) = (Add (Foo x) (Foo x))
+    //(Foo (Z))   = (I (O (O (O (O (O (O (O (O (O (O (O (O (O (O (O (E)))))))))))))))))
+    //(Foo (S x)) = (Add (Foo x) (Foo x))
 
-    (Main) = (Foo (S (S (S (S (S (S (S (S (S (S (S (Z)))))))))))))
-  "
+    //(Main) = (Foo (S (S (S (S (S (S (S (S (S (S (S (Z)))))))))))))
+  //"
   
-  ((ReadFile code) λntab λfile
-  let term = (ReadTerm ntab "(Main)")
-  let term = (High file term)
-  let term = (Low term)
-  let term = (Show term ntab)
-  term)
+  //((ReadFile code) λntab λfile
+  //let term = (ReadTerm ntab "(Main)")
+  //let term = (High file term)
+  //let term = (Low term)
+  //let term = (Show term ntab)
+  //term)
 
 // 6764632 / 23521
 // 6785093 / 23521

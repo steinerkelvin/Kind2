@@ -535,7 +535,14 @@ ParseEnd = λcode (ParseEndGo code)
   //i2n: (Array String)
 //}
 
+// (NameTable.Empty) : NameTable
 NameTable.Empty = (NameTable Empty Array.Empty)
+
+// (NameTable.NameToId NameTable String) : (Maybe U32)
+(NameTable.NameToId (NameTable n2i i2n) name) = (PairGet (Get n2i (StrHash name)) λn2iλgot(got))
+
+// (NameTable.IdToName NameTable U32) : (Maybe String)
+(NameTable.IdToName (NameTable n2i i2n) id) = (PairGet (Array.Got i2n id) λi2nλgot(got))
 
 // Finalizes the parsing of a term.
 // - Converts every ctr name into a sequential id.
@@ -675,98 +682,102 @@ EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
 // ------------
 
 // (Show term:Term) : String
-(Show term) = ((ShowGo term) "")
-  (ShowGo (Var name)) =
+(Show term ntab) = ((ShowGo term ntab) "")
+  (ShowGo (Var name) ntab) =
     λx((ShowGoStr (Name.GetString name))
       x)
-  (ShowGo (Met hash)) =
+  (ShowGo (Met hash) ntab) =
     λx((ShowGoStr "_")
       ((ShowGoStr (ShowU32 hash))
       x))
-  (ShowGo (Let name expr body)) =
+  (ShowGo (Let name expr body) ntab) =
     λx((ShowGoStr "let ")
       ((ShowGoStr (Name.GetString name))
       ((ShowGoStr " = ")
-      ((ShowGo expr)
+      ((ShowGo expr ntab)
       ((ShowGoStr "; ")
-      ((ShowGo body)
+      ((ShowGo body ntab)
       x))))))
-  (ShowGo (Ann xval xtyp)) =
+  (ShowGo (Ann xval xtyp) ntab) =
     λx((ShowGoStr "{")
-      ((ShowGo xval)
+      ((ShowGo xval ntab)
       ((ShowGoStr " : ")
-      ((ShowGo xtyp)
+      ((ShowGo xtyp ntab)
       ((ShowGoStr "}")
       x)))))
-  (ShowGo Typ) =
+  (ShowGo Typ ntab) =
     λx((ShowGoStr "Type")
       x)
-  (ShowGo (All name type body)) =
+  (ShowGo (All name type body) ntab) =
     λx((ShowGoStr "∀(")
       ((ShowGoStr (Name.GetString name))
       ((ShowGoStr ": ")
-      ((ShowGo type)
+      ((ShowGo type ntab)
       ((ShowGoStr ") ")
-      ((ShowGo body)
+      ((ShowGo body ntab)
       x))))))
-  (ShowGo (Lam name body)) =
+  (ShowGo (Lam name body) ntab) =
     λx((ShowGoStr "λ")
       ((ShowGoStr (Name.GetString name))
       ((ShowGoStr " ")
-      ((ShowGo body)
+      ((ShowGo body ntab)
       x))))
-  (ShowGo (App func argm)) =
+  (ShowGo (App func argm) ntab) =
     λx((ShowGoStr "(")
-      ((ShowGo func)
+      ((ShowGo func ntab)
       ((ShowGoStr " ")
-      ((ShowGo argm)
+      ((ShowGo argm ntab)
       ((ShowGoStr ")")
       x)))))
-  (ShowGo (Ct0 ctid)) =
+  (ShowGo (Ct0 ctid) ntab) =
     λx((ShowGoStr "(")
-      ((ShowGoStr (ShowU32 ctid))
+      ((ShowGoCtrName ctid ntab)
       ((ShowGoStr ")")
       x)))
-  (ShowGo (Ct1 ctid a)) =
+  (ShowGo (Ct1 ctid a) ntab) =
     λx((ShowGoStr "(")
-      ((ShowGoStr (ShowU32 ctid))
+      ((ShowGoCtrName ctid ntab)
       ((ShowGoStr " ")
-      ((ShowGo a)
+      ((ShowGo a ntab)
       ((ShowGoStr ")")
       x)))))
-  (ShowGo (Ct2 ctid a b)) =
+  (ShowGo (Ct2 ctid a b) ntab) =
     λx((ShowGoStr "(")
-      ((ShowGoStr (ShowU32 ctid))
+      ((ShowGoCtrName ctid ntab)
       ((ShowGoStr " ")
-      ((ShowGo a)
+      ((ShowGo a ntab)
       ((ShowGoStr " ")
-      ((ShowGo b)
+      ((ShowGo b ntab)
       ((ShowGoStr ")")
       x)))))))
-  (ShowGo (Ct3 ctid a b c)) =
+  (ShowGo (Ct3 ctid a b c) ntab) =
     λx((ShowGoStr "(")
-      ((ShowGoStr (ShowU32 ctid))
+      ((ShowGoCtrName ctid ntab)
       ((ShowGoStr " ")
-      ((ShowGo a)
+      ((ShowGo a ntab)
       ((ShowGoStr " ")
-      ((ShowGo b)
+      ((ShowGo b ntab)
       ((ShowGoStr " ")
-      ((ShowGo c)
+      ((ShowGo c ntab)
       ((ShowGoStr ")")
       x)))))))))
-  (ShowGo (Ct4 ctid a b c d)) =
+  (ShowGo (Ct4 ctid a b c d) ntab) =
     λx((ShowGoStr "(")
-      ((ShowGoStr (ShowU32 ctid))
+      ((ShowGoCtrName ctid ntab)
       ((ShowGoStr " ")
-      ((ShowGo a)
+      ((ShowGo a ntab)
       ((ShowGoStr " ")
-      ((ShowGo b)
+      ((ShowGo b ntab)
       ((ShowGoStr " ")
-      ((ShowGo c)
+      ((ShowGo c ntab)
       ((ShowGoStr " ")
-      ((ShowGo d)
+      ((ShowGo d ntab)
       ((ShowGoStr ")")
       x)))))))))))
+  (ShowGoCtrName id ntab) =
+    (Maybe.Case (NameTable.IdToName ntab id)
+      (ShowGoStr "?")
+      λname (ShowGoStr name))
   (ShowGoStr xs) =
     λx(StrConcat xs x)
 
@@ -1221,8 +1232,8 @@ EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
   (UnifyTest 0 a b eqs subst errs) =
     let err = λsubst (StrFlatten [
       "Type mismatch." NewLine
-      "- Expected: " (Show (Low (SubstHoles subst a))) NewLine
-      "- Detected: " (Show (Low (SubstHoles subst b))) NewLine
+      "- Expected: " (Show (Low (SubstHoles subst a)) NameTable.Empty) NewLine
+      "- Detected: " (Show (Low (SubstHoles subst b)) NameTable.Empty) NewLine
     ])
     (UnifyGo eqs subst (Cons err errs))
   (UnifyTest 1 a b eqs subst errs) =
@@ -1249,8 +1260,8 @@ EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
 (DebugPrintType (Err err)                  term) = err
 (DebugPrintType (Ok eqs (Pair subst type)) term) = (StrFlatten [
   NewLine
-  "main : " (Show (Low type)) " = " NewLine
-  "  " (Show (Normal Empty term)) NewLine
+  "main : " (Show (Low type) NameTable.Empty) " = " NewLine
+  "  " (Show (Normal Empty term) NameTable.Empty) NewLine
 ])
 
 (DebugPrintAll (Err err)                  term) = err
@@ -1266,8 +1277,8 @@ EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
   "-------" NewLine
   (StrFlatten [
     "main" NewLine
-    " : " (Show (Low type)) NewLine
-    " = " (Show (Normal Empty term)) NewLine
+    " : " (Show (Low type) NameTable.Empty) NewLine
+    " = " (Show (Normal Empty term) NameTable.Empty) NewLine
   ])
   NewLine
 ])
@@ -1366,15 +1377,14 @@ EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
     (Foo (Z))   = (I (O (O (O (O (O (O (O (O (O (O (O (O (O (O (O (E)))))))))))))))))
     (Foo (S x)) = (Add (Foo x) (Foo x))
 
-    (Main) = (Foo (S (S (S (S (S (S (S (S (S (S (Z))))))))))))
+    (Main) = (Foo (S (S (S (S (S (S (S (S (S (S (S (Z)))))))))))))
   "
-  //(Main) = (λf λx (f (f (f (f x)))) λf λx (f (f (f (f x)))))
   
   ((ReadFile code) λntab λfile
   let term = (ReadTerm ntab "(Main)")
   let term = (High file term)
   let term = (Low term)
-  let term = (Show term)
+  let term = (Show term ntab)
   term)
 
 // 6764632 / 23521
@@ -1383,3 +1393,6 @@ EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
 // 8157098 / 23521
 // 8589622 / 23521
 // 4^4 = 102m rewrites
+
+
+// 13432050 / 47072

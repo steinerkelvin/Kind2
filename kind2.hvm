@@ -933,53 +933,97 @@ EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
 // TODO: perhaps linearize term?
 // (HFindMatchingRule (List Rule) HTerm File Vars) : HTerm
 (HFindMatchingRule End                  term file vars) = (Triple file vars term)
-(HFindMatchingRule (Rule lhs rhs rules) term file vars) = (HFindMatchingRule.Found (HMatch.Go lhs term) rhs rules term file vars)
-  (HFindMatchingRule.Found None        rhs rules term file vars) = (HFindMatchingRule rules term file vars)
-  (HFindMatchingRule.Found (Some subs) rhs rules term file vars) = (HighGo rhs file (subs vars))
+(HFindMatchingRule (Rule lhs rhs rules) term file vars) = (HFindMatchingRule.Found (HMatches.Go lhs term) rhs rules file vars)
+  (HFindMatchingRule.Found (Triple lhs term 0) rhs rules file vars) = (HFindMatchingRule rules term file vars)
+  (HFindMatchingRule.Found (Triple lhs term 1) rhs rules file vars) = (HighGo rhs file ((HMatch.Go lhs term) vars))
 
 // High-Order pattern-matching
-// (Match Term HTerm) : (Maybe (List (Pair String HTerm)))
-(HMatch x y) = (MaybeMap (HMatch.Go x y) λz(z Nil))
 
-  (HMatch.Go (LHS.Ct0 x.ctid) (HCt0 y.ctid)) = (HMatch.Go.Ct0 (== x.ctid y.ctid))
-    (HMatch.Go.Ct0 0) = None
-    (HMatch.Go.Ct0 1) =
-      (Some λz(z))
+// Checks if a LHS matches with a HTerm.
+// Returns the reconstructed terms, and 0/1 if not/yes.
+// (HMatches LHS HTerm) : (Triple Term HTerm Bool)
+(HMatches x y) = (HMatches.Go x y)
 
-  (HMatch.Go (LHS.Ct1 x.ctid x.a) (HCt1 y.ctid y.a)) = (HMatch.Go.Ct1 (== x.ctid y.ctid) x.a y.a)
-    (HMatch.Go.Ct1 0 x.a y.a) = None
-    (HMatch.Go.Ct1 1 x.a y.a) =
-      (Perhaps (HMatch.Go x.a y.a) λas
-      (Some λz(as z)))
+  (HMatches.Chain a b 0 fn cont) = (cont a b 0)
+  (HMatches.Chain a b 1 fn cont) = (TripleGet (fn a b) cont)
 
-  (HMatch.Go (LHS.Ct2 x.ctid x.a x.b) (HCt2 y.ctid y.a y.b)) = (HMatch.Go.Ct2 (== x.ctid y.ctid) x.a x.b y.a y.b)
-    (HMatch.Go.Ct2 0 x.a x.b y.a y.b) = None
-    (HMatch.Go.Ct2 1 x.a x.b y.a y.b) =
-      (Perhaps (HMatch.Go x.a y.a) λas
-      (Perhaps (HMatch.Go x.b y.b) λbs
-      (Some λz(as (bs z)))))
+  (HMatches.Go (LHS.Ct0 x.ctid) (HCt0 y.ctid)) = (HMatches.Go.Ct0 (== x.ctid y.ctid) x.ctid y.ctid)
+    (HMatches.Go.Ct0 0 x.ctid y.ctid) = (Triple (LHS.Ct0 x.ctid) (HCt0 y.ctid) 0)
+    (HMatches.Go.Ct0 1 x.ctid y.ctid) = (Triple (LHS.Ct0 x.ctid) (HCt0 y.ctid) 1)
 
-  (HMatch.Go (LHS.Ct3 x.ctid x.a x.b x.c) (HCt3 y.ctid y.a y.b y.c)) = (HMatch.Go.Ct3 (== x.ctid y.ctid) x.a x.b x.c y.a y.b y.c)
-    (HMatch.Go.Ct3 0 x.a x.b x.c y.a y.b y.c) = None
-    (HMatch.Go.Ct3 1 x.a x.b x.c y.a y.b y.c) =
-      (Perhaps (HMatch.Go x.a y.a) λas
-      (Perhaps (HMatch.Go x.b y.b) λbs
-      (Perhaps (HMatch.Go x.c y.c) λcs
-      (Some λz(as (bs (cs z)))))))
+  (HMatches.Go (LHS.Ct1 x.ctid x.a) (HCt1 y.ctid y.a)) = (HMatches.Go.Ct1 (== x.ctid y.ctid) x.ctid x.a y.ctid y.a)
+    (HMatches.Go.Ct1 0 x.ctid x.a y.ctid y.a) =
+      (Triple (LHS.Ct1 x.ctid x.a) (HCt1 y.ctid y.a) 0)
+    (HMatches.Go.Ct1 1 x.ctid x.a y.ctid y.a) =
+      (HMatches.Chain x.a y.a 1 λx.aλy.a(HMatches.Go x.a y.a) λx.a λy.a λm
+      (Triple (LHS.Ct1 x.ctid x.a) (HCt1 y.ctid y.a) m))
 
-  (HMatch.Go (LHS.Ct4 x.ctid x.a x.b x.c x.d) (HCt4 y.ctid y.a y.b y.c y.d)) = (HMatch.Go.Ct4 (== x.ctid y.ctid) x.a x.b x.c x.d y.a y.b y.c y.d)
-    (HMatch.Go.Ct4 0 x.a x.b x.c x.d y.a y.b y.c y.d) = None
-    (HMatch.Go.Ct4 1 x.a x.b x.c x.d y.a y.b y.c y.d) =
-      (Perhaps (HMatch.Go x.a y.a) λas
-      (Perhaps (HMatch.Go x.b y.b) λbs
-      (Perhaps (HMatch.Go x.c y.c) λcs
-      (Perhaps (HMatch.Go x.d y.d) λds
-      (Some λz(as (bs (cs (ds z)))))))))
+  (HMatches.Go (LHS.Ct2 x.ctid x.a x.b) (HCt2 y.ctid y.a y.b)) = (HMatches.Go.Ct2 (== x.ctid y.ctid) x.ctid x.a x.b y.ctid y.a y.b)
+    (HMatches.Go.Ct2 0 x.ctid x.a x.b y.ctid y.a y.b) =
+      (Triple (LHS.Ct2 x.ctid x.a x.b) (HCt2 y.ctid y.a y.b) 0)
+    (HMatches.Go.Ct2 1 x.ctid x.a x.b y.ctid y.a y.b) =
+      (HMatches.Chain x.a y.a 1 λx.aλy.a(HMatches.Go x.a y.a) λx.a λy.a λm
+      (HMatches.Chain x.b y.b m λx.bλy.b(HMatches.Go x.b y.b) λx.b λy.b λm
+      (Triple (LHS.Ct2 x.ctid x.a x.b) (HCt2 y.ctid y.a y.b) m)))
 
-  (HMatch.Go (LHS.Var a_name uses) b) =
-    (Some λz(Clone uses a_name b z))
+  (HMatches.Go (LHS.Ct3 x.ctid x.a x.b x.c) (HCt3 y.ctid y.a y.b y.c)) = (HMatches.Go.Ct3 (== x.ctid y.ctid) x.ctid x.a x.b x.c y.ctid y.a y.b y.c)
+    (HMatches.Go.Ct3 0 x.ctid x.a x.b x.c y.ctid y.a y.b y.c) =
+      (Triple (LHS.Ct3 x.ctid x.a x.b x.c) (HCt3 y.ctid y.a y.b y.c) 0)
+    (HMatches.Go.Ct3 1 x.ctid x.a x.b x.c y.ctid y.a y.b y.c) =
+      (HMatches.Chain x.a y.a 1 λx.aλy.a(HMatches.Go x.a y.a) λx.a λy.a λm
+      (HMatches.Chain x.b y.b m λx.bλy.b(HMatches.Go x.b y.b) λx.b λy.b λm
+      (HMatches.Chain x.c y.c m λx.cλy.c(HMatches.Go x.c y.c) λx.c λy.c λm
+      (Triple (LHS.Ct3 x.ctid x.a x.b x.c) (HCt3 y.ctid y.a y.b y.c) m))))
 
-  (HMatch.Go a b) = None
+  (HMatches.Go (LHS.Ct4 x.ctid x.a x.b x.c x.d) (HCt4 y.ctid y.a y.b y.c y.d)) = (HMatches.Go.Ct4 (== x.ctid y.ctid) x.ctid x.a x.b x.c x.d y.ctid y.a y.b y.c y.d)
+    (HMatches.Go.Ct4 0 x.ctid x.a x.b x.c x.d y.ctid y.a y.b y.c y.d) =
+      (Triple (HCt4 x.ctid x.a x.b x.c x.d) (HCt4 y.ctid y.a y.b y.c y.d))
+    (HMatches.Go.Ct4 1 x.ctid x.a x.b x.c x.d y.ctid y.a y.b y.c y.d) =
+      (HMatches.Chain x.a y.a 1 λx.aλy.a(HMatches.Go x.a y.a) λx.a λy.a λm
+      (HMatches.Chain x.b y.b m λx.aλy.b(HMatches.Go x.b y.b) λx.a λy.b λm
+      (HMatches.Chain x.c y.c m λx.aλy.c(HMatches.Go x.c y.c) λx.a λy.c λm
+      (HMatches.Chain x.d y.d m λx.aλy.d(HMatches.Go x.d y.d) λx.a λy.d λm
+      (Triple (LHS.Ct4 x.ctid x.a x.b x.c x.d) (HCt4 y.ctid y.a y.b y.c y.d) m)))))
+
+  (HMatches.Go (LHS.Var a_name uses) b) =
+    (Triple (LHS.Var a_name uses) b 1)
+
+  (HMatches.Go a b) =
+    (Triple a b 0)
+
+// (HMatch Term HTerm) : (List (Pair String HTerm))
+(HMatch x y) = ((HMatch.Go x y) Nil)
+
+  (HMatch.Go (LHS.Ct0 x.ctid) (HCt0 y.ctid)) = λz
+    (z)
+
+  (HMatch.Go (LHS.Ct1 x.ctid x.a) (HCt1 y.ctid y.a)) = λz
+    ((HMatch.Go x.a y.a)
+    z)
+
+  (HMatch.Go (LHS.Ct2 x.ctid x.a x.b) (HCt2 y.ctid y.a y.b)) = λz
+    ((HMatch.Go x.a y.a)
+    ((HMatch.Go x.b y.b)
+    z))
+
+  (HMatch.Go (LHS.Ct3 x.ctid x.a x.b x.c) (HCt3 y.ctid y.a y.b y.c)) = λz
+    ((HMatch.Go x.a y.a)
+    ((HMatch.Go x.b y.b)
+    ((HMatch.Go x.c y.c)
+    z)))
+
+  (HMatch.Go (LHS.Ct4 x.ctid x.a x.b x.c x.d) (HCt4 y.ctid y.a y.b y.c y.d)) = λz
+    ((HMatch.Go x.a y.a)
+    ((HMatch.Go x.b y.b)
+    ((HMatch.Go x.c y.c)
+    ((HMatch.Go x.d y.d)
+    z))))
+
+  (HMatch.Go (LHS.Var a_name uses) b) = λz
+    (Clone uses a_name b z)
+
+  (HMatch.Go a b) = λz
+    z
 
 // High-order application
 (HApply (HLam fbody) argm) = (fbody argm)
@@ -1333,6 +1377,8 @@ EntryEmpty = (Entry (Pair (Var "?") (Var "?")) End)
   let term = (Show term)
   term)
 
+// 6764632 / 23521
+// 6785093 / 23521
 // 7981162 / 23521
 // 8157098 / 23521
 // 8589622 / 23521

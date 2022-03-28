@@ -35,6 +35,8 @@
 (PairGet (Pair x y) fn) = (fn x y)
 (PairFst (Pair x y)) = x
 (PairSnd (Pair x y)) = y
+(PairMutSnd (Pair x y) fn) = (Pair x (fn y))
+(PairMutFst (Pair x y) fn) = (Pair (fn x) y)
 
 
 
@@ -144,11 +146,14 @@ NewLine = (StrCons 10 StrNil)
 (StrIsEmpty StrNil) = 1
 (StrIsEmpty (StrCons x xs)) = 0
 
+// StrMap
+(StrMap StrNil fn)         = StrNil
+(StrMap (StrCons x xs) fn) = (StrCons (fn x) (StrMap xs fn))
+
 // StrJoin
 (StrJoin Nil          sep) = ""
 (StrJoin (Cons x Nil) sep) = x
 (StrJoin (Cons x xs)  sep) = (StrFlatten [x sep (StrJoin xs sep)])
-
 
 // Array
 // =====
@@ -633,10 +638,8 @@ NameTable.Empty = (NameTable Empty Array.Empty)
 (Ctr.GetId term)               = 0
 
 (Arg.Get (Arg name expr) cont) = (cont name expr)
-(Arg.Get term            cont) = (cont "__" term)
+(Arg.Get term            cont) = (cont (Name.Make "") term)
 
-//(Arg.GetName (Arg name term)) = name
-//(Arg.GetTerm (Arg name term)) = term
 
 
 // File
@@ -847,6 +850,25 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       λname (ShowGoStr name))
   (ShowGoStr xs) =
     λx(StrConcat xs x)
+
+(ShowContext Nil file) = ""
+(ShowContext ctx file) =
+  let build = λz
+    ((ShowGoStr "Context:")
+    ((ShowGoStr NewLine)
+    ((ShowGoContext ctx file)
+      z)))
+  (build "")
+
+  (ShowGoContext Nil file) = λz(z)
+  (ShowGoContext (Cons (Pair name type) rest) file) =
+    λz((ShowGoStr "- ")
+      ((ShowGoStr (Name.GetString name))
+      ((ShowGoStr " : ") 
+      ((ShowGo type file)
+      ((ShowGoStr NewLine)
+      ((ShowGoContext rest file)
+      z))))))
 
 (ShowFile file) = ((ShowGoFile (Array.ToList (File.GetFuncs file)) file) "")
   (ShowGoFile Nil file) =
@@ -1248,7 +1270,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
         (Chain (CheckGo file argm ftype ctx eqs) λeqs λok
         (Ok eqs (fbody (High file argm Nil))))
       (InferGoApp file other argm ctx eqs) =
-        (Err ["Non-function application.", other, argm, ctx])
+        (Err "Non-function application.")
 
   // Ctr checker
   (InferGo file (Ct0 id)         ctx eqs) = (InferGo.Ctr.FindFunc file id (Ct0 id)         ctx eqs)
@@ -1260,16 +1282,17 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     // 1. Find Ctr's type on file
     (InferGo.Ctr.FindFunc file ctid term ctx eqs) =
       (PairGet (File.GotFunc file ctid) λfile λfunc
-      (Maybe.Case func (Err "Type not found.") λfunc
+      (Maybe.Case func (Err "Type not found.") λfunc // shouldn't be reachable, since it defaults
       (Func.Get func λlty λrty λrul
-      (InferGo.Ctr.MakeList file lty rty term ctx eqs))))
+      (InferGo.Ctr.MakeList file ctid lty rty term ctx eqs))))
   
     // 2. Convert types and args to lists
-    (InferGo.Ctr.MakeList file (Ct0 t.id)             rt (Ct0 id)         ctx eqs) = (InferGo.Ctr.CheckList file []            []        rt [] ctx eqs)
-    (InferGo.Ctr.MakeList file (Ct1 t.id at)          rt (Ct1 id a)       ctx eqs) = (InferGo.Ctr.CheckList file [at]          [a]       rt [] ctx eqs)
-    (InferGo.Ctr.MakeList file (Ct2 t.id at bt)       rt (Ct2 id a b)     ctx eqs) = (InferGo.Ctr.CheckList file [at bt]       [a b]     rt [] ctx eqs)
-    (InferGo.Ctr.MakeList file (Ct3 t.id at bt ct)    rt (Ct3 id a b c)   ctx eqs) = (InferGo.Ctr.CheckList file [at bt ct]    [a b c]   rt [] ctx eqs)
-    (InferGo.Ctr.MakeList file (Ct4 t.id at bt ct dt) rt (Ct4 id a b c d) ctx eqs) = (InferGo.Ctr.CheckList file [at bt ct dt] [a b c d] rt [] ctx eqs)
+    (InferGo.Ctr.MakeList file ctid (Ct0 t.id)             rt (Ct0 id)         ctx eqs) = (InferGo.Ctr.CheckList file []            []        rt [] ctx eqs)
+    (InferGo.Ctr.MakeList file ctid (Ct1 t.id at)          rt (Ct1 id a)       ctx eqs) = (InferGo.Ctr.CheckList file [at]          [a]       rt [] ctx eqs)
+    (InferGo.Ctr.MakeList file ctid (Ct2 t.id at bt)       rt (Ct2 id a b)     ctx eqs) = (InferGo.Ctr.CheckList file [at bt]       [a b]     rt [] ctx eqs)
+    (InferGo.Ctr.MakeList file ctid (Ct3 t.id at bt ct)    rt (Ct3 id a b c)   ctx eqs) = (InferGo.Ctr.CheckList file [at bt ct]    [a b c]   rt [] ctx eqs)
+    (InferGo.Ctr.MakeList file ctid (Ct4 t.id at bt ct dt) rt (Ct4 id a b c d) ctx eqs) = (InferGo.Ctr.CheckList file [at bt ct dt] [a b c d] rt [] ctx eqs)
+    (InferGo.Ctr.MakeList file ctid a                      rt b                ctx eqs) = (Err "Incorrect arity.")
 
     // 3. Recursively checks the lists
     (InferGo.Ctr.CheckList file Nil Nil rtyp sub ctx eqs) =
@@ -1308,7 +1331,31 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   (CheckGo file term type ctx eqs) =
     (Chain (InferGo file term ctx eqs) λeqs λterm_t
-    (Ok (Cons (Pair type term_t) eqs) Unit))
+    (Ok (Cons (Equation type term_t ctx) eqs) Unit))
+
+// TODO: I don't want to commit to any complex unification algorithm, so this
+// implementation will just substitute immediate (flex-rigid) terms, for now.
+// In a future, we should revisit this, and decide what unification and
+// resolution algorithms we want to have on the language.
+// (Unify equations:(List (Pair HTerm HTerm)) substitutions:(Map HTerm)) : (Result (Map HTerm))
+(Unify file eqs subst) = (UnifyGo file eqs subst Nil)
+  (UnifyGo file Nil subst Nil) =
+    (Ok Nil subst)
+  (UnifyGo file Nil subst errs) =
+    (Err (StrJoin (ListMap errs λx(x subst)) NewLine))
+  (UnifyGo file (Cons (Equation a b ctx) eqs) subst errs) =
+    (PairGet (Equal a b 0 subst) λsubst λeq
+    (UnifyTest file eq a b ctx eqs subst errs))
+  (UnifyTest file 0 a b ctx eqs subst errs) =
+    let err = λsubst (StrFlatten [
+      "Type mismatch." NewLine
+      "- Expected: " (Show (Low (SubstHoles subst a)) file) NewLine
+      "- Detected: " (Show (Low (SubstHoles subst b)) file) NewLine
+      (ShowContext (ListMap ctx λp(PairMutSnd p λx(Low (SubstHoles subst x)))) file)
+    ])
+    (UnifyGo file eqs subst (Cons err errs))
+  (UnifyTest file 1 a b ctx eqs subst errs) =
+    (UnifyGo file eqs subst errs)
 
 // FIXME: this will loop if we subst `a_hash <- (HMet a_hash)`, since the Equal
 // rewrite rule will be called repeatedly. I don't have the time to reason about
@@ -1361,29 +1408,6 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Equal.Got.1 b_hash a (Some b) depth subst) = (Equal a b depth subst)
 (Equal a b depth subst) =
   (Pair subst 0)
-
-// TODO: I don't want to commit to any complex unification algorithm, so this
-// implementation will just substitute immediate (flex-rigid) terms, for now.
-// In a future, we should revisit this, and decide what unification and
-// resolution algorithms we want to have on the language.
-// (Unify equations:(List (Pair HTerm HTerm)) substitutions:(Map HTerm)) : (Result (Map HTerm))
-(Unify file eqs subst) = (UnifyGo file eqs subst Nil)
-  (UnifyGo file Nil subst Nil) =
-    (Ok Nil subst)
-  (UnifyGo file Nil subst errs) =
-    (Err (StrJoin (ListMap errs λx(x subst)) NewLine))
-  (UnifyGo file (Cons (Pair a b) eqs) subst errs) =
-    (PairGet (Equal a b 0 subst) λsubst λeq
-    (UnifyTest file eq a b eqs subst errs))
-  (UnifyTest file 0 a b eqs subst errs) =
-    let err = λsubst (StrFlatten [
-      "Type mismatch." NewLine
-      "- Expected: " (Show (Low (SubstHoles subst a)) file) NewLine
-      "- Detected: " (Show (Low (SubstHoles subst b)) file) NewLine
-    ])
-    (UnifyGo file eqs subst (Cons err errs))
-  (UnifyTest file 1 a b eqs subst errs) =
-    (UnifyGo file eqs subst errs)
 
 // (SubstHoles Subst Term) : Term
 (SubstHoles subst (HVar name))         = (HVar name)
@@ -1540,43 +1564,74 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
 (Verify.File file) = (Verify.Funcs file (Array.ToList (File.GetFuncs file)))
 
-(Verify.Funcs file Nil) = Nil
+(Verify.Funcs file Nil) = StrNil
 (Verify.Funcs file (Cons func funcs)) =
   let head = (Verify.Func file func)
   let tail = (Verify.Funcs file funcs)
-  (Cons head tail)
+  (StrConcat head tail)
 
-(Verify.Func file (Func lty rty rules)) = [
-  (Func.GetName (Func lty rty rules) file)
-  (Verify.Rules file lty rty rules)
-]
+(Verify.Func file (Func lty rty rules)) =
+  (Verify.Print
+    (Func.GetName (Func lty rty rules) file)
+    (Verify.Rules file lty rty rules))
 
-(Verify.Rules file lty rty End) = Nil
+(Verify.Print name err) =
+  (If (StrIsEmpty err) ""
+    let title = (StrFlatten ["Error on '" name "':"])
+    let tline = (StrMap title λx('-'))
+    (StrFlatten [
+      NewLine
+      title NewLine
+      tline NewLine
+      NewLine
+      err
+      NewLine
+    ]))
+
+(Verify.Rules file lty rty End) = ""
 (Verify.Rules file lty rty (Rule lhs rhs rules)) =
   let head = (Verify.Rule  file lty rty lhs rhs)
   let tail = (Verify.Rules file lty rty rules)
-  (Cons head tail)
+  (Verify.Rules.Concat head tail)
 
-(Verify.Rule file (Ct0 t.ctid) rty (Ct0 l.ctid) rhs) =
+  (Verify.Rules.Concat (Err err)     list) = (StrConcat err list)
+  (Verify.Rules.Concat (Ok eqs subs) list) = list
+
+// TODO: simplify repetitive logic below
+
+(Verify.Rule file (Ct0 t.ctid) rty lhs rhs) =
   let ctx = Nil
-  (Verify.Print file (Check file rhs (High file rty Nil) ctx))
+  (Check file rhs (High file rty Nil) ctx)
 
-(Verify.Rule file (Ct1 t.ctid t.a) rty (Ct1 l.ctid l.a) rhs) =
+(Verify.Rule file (Ct1 t.ctid t.a) rty lhs rhs) =
   let ctx = Nil
   let ctx = (Arg.Get t.a λname λexpr (Cons (Pair name (High file expr Nil)) ctx))
-  (Verify.Print file (Check file rhs (High file rty Nil) ctx))
+  (Check file rhs (High file rty Nil) ctx)
 
-(Verify.Rule file (Ct2 t.ctid t.a t.b) rty (Ct2 l.ctid l.a l.b) rhs) =
+(Verify.Rule file (Ct2 t.ctid t.a t.b) rty lhs rhs) =
   let ctx = Nil
   let ctx = (Arg.Get t.a λname λexpr (Cons (Pair name (High file expr Nil)) ctx))
   let ctx = (Arg.Get t.b λname λexpr (Cons (Pair name (High file expr Nil)) ctx))
-  (Verify.Print file (Check file rhs (High file rty Nil) ctx))
+  (Check file rhs (High file rty Nil) ctx)
+
+(Verify.Rule file (Ct3 t.ctid t.a t.b t.c) rty lhs rhs) =
+  let ctx = Nil
+  let ctx = (Arg.Get t.a λname λexpr (Cons (Pair name (High file expr Nil)) ctx))
+  let ctx = (Arg.Get t.b λname λexpr (Cons (Pair name (High file expr Nil)) ctx))
+  let ctx = (Arg.Get t.c λname λexpr (Cons (Pair name (High file expr Nil)) ctx))
+  (Check file rhs (High file rty Nil) ctx)
+
+(Verify.Rule file (Ct4 t.ctid t.a t.b t.c t.d) rty lhs rhs) =
+  let ctx = Nil
+  let ctx = (Arg.Get t.a λname λexpr (Cons (Pair name (High file expr Nil)) ctx))
+  let ctx = (Arg.Get t.b λname λexpr (Cons (Pair name (High file expr Nil)) ctx))
+  let ctx = (Arg.Get t.c λname λexpr (Cons (Pair name (High file expr Nil)) ctx))
+  let ctx = (Arg.Get t.d λname λexpr (Cons (Pair name (High file expr Nil)) ctx))
+  (Check file rhs (High file rty Nil) ctx)
 
 (Verify.Rule file lty rty b rhs) =
   "Incorrect arity."
 
-(Verify.Print file (Err err))     = err
-(Verify.Print file (Ok eqs subs)) = "ok"
 
 (Main n) =
   let code = "
@@ -1588,16 +1643,20 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Zero)         : (Nat)
     (Succ n:(Nat)) : (Nat)
 
-    (Not (Bool))  : (Bool)
-    (Not (True))  = (False)
-    (Not (False)) = (True)
+    (Not x:(Bool)) : (Bool)
+    (Not (True))   = (False)
+    (Not (False))  = (True)
 
-    (Id t:Type x:t) : t
-    (Id t      x  ) = x
+    (Id t:Type t) : t
+    (Id t x) = x
+
+    (Elim p:∀(x:(Bool))Type t:(P (True)) f:(P (False)) b:(Bool)): (P b)
+    (Elim p t f b) = f
 
     (Main) : (Nat)
-    (Main) = (Id (Nat) (Succ (Zero)))
+    (Main) = (Ue (Nat) (Id (Nat) (Succ (Zero))))
   "
   let file = (ReadFile code)
   (Verify.File file)
+
 

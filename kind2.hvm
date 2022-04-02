@@ -14,6 +14,9 @@
 (U32.If 0 t f) = f
 (U32.If 1 t f) = t
 
+(U32.And 0 b) = 0
+(U32.And 1 b) = b
+
 
 
 // Bool
@@ -97,6 +100,10 @@
 // (ListLength (List a)) : U32
 (ListLength Nil)         = 0
 (ListLength (Cons x xs)) = (+ 1 (ListLength xs))
+
+// (ListIsEmpty (List a)) : Bool
+(ListIsEmpty Nil)         = 1
+(ListIsEmpty (Cons x xs)) = 0
 
 // Concatenates two lists
 // (Concat a:(List a) b:(List a)) : (List a)
@@ -693,6 +700,9 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 // (Func.Get func:Func ...) : ...
 (Func.Get (Func lty rty rules) cont) = (cont lty rty rules)
 
+// (Func.GetRules func:Func ...) : ...
+(Func.GetRules (Func lty rty rules)) = rules
+
 // (File.Make NameTable (List Decl)) : File
 (File.Make decls) = ((File.Make.Go NameTable.Empty decls) λntab λfuns (File ntab funs))
 
@@ -748,6 +758,14 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
 // (File.IdToName File U32) : (Maybe String)
 (File.IdToName (File ntab funs) id) = (NameTable.IdToName ntab id)
+
+// (File.IsCtr File U32) : Bool
+(File.IsCtr (File ntab funs) ctid) =
+  (PairGet (Array.Got funs ctid) λfuns λgot
+  (Maybe.Case got 1 λfunc(File.IsCtr.Func func)))
+
+  (File.IsCtr.Func (Func lty rty End))                  = 1
+  (File.IsCtr.Func (Func lty rty (Rule lhs rhs rules))) = 0
 
 // Stringifying
 // ------------
@@ -1363,7 +1381,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (UnifyGo file capt Nil ars subst errs) =
     (Errored (StrJoin (ListMap errs λx(x subst)) NewLine))
   (UnifyGo file capt (Cons (Equation a b dep ctx) eqs) ars subst errs) =
-    (TripGet (Equal capt a b dep subst ars) λsubst λars λeq
+    (TripGet (Equal file capt a b dep subst ars) λsubst λars λeq
     (UnifyTest file capt eq a b ctx eqs ars subst errs))
 
   (UnifyTest file capt 0 a b ctx eqs ars subst errs) =
@@ -1382,101 +1400,105 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 // this right now, so I'll leave this to a future.
 // (Equal U32 HTerm HTerm U32 Subst (List Argument)) : (Trip Subst (List Argument) Bool)
 
-(Equal k (HLev a_name a_numb) (HLev b_name b_numb) depth subst ars) =
+(Equal file k (HLev a_name a_numb) (HLev b_name b_numb) depth subst ars) =
   (Trip subst ars (== a_numb b_numb))
 
-(Equal 0 (HVar a_name) (HVar b_name) depth subst ars) =
+(Equal file 0 (HVar a_name) (HVar b_name) depth subst ars) =
   (Trip subst ars (Name.Equal a_name b_name))
 
-(Equal 0 (HVar a_name) b depth subst ars) =
-  (Capt (HVar a_name) b subst ars)
+(Equal file 0 (HVar a_name) b depth subst ars) =
+  (Capt file (HVar a_name) b subst ars)
 
-(Equal 1 a (HVar b_name) depth subst ars) =
-  (Capt a (HVar b_name) subst ars)
+(Equal file 1 a (HVar b_name) depth subst ars) =
+  (Capt file a (HVar b_name) subst ars)
 
-(Equal k HTyp HTyp depth subst ars) =
+(Equal file k HTyp HTyp depth subst ars) =
   (Trip subst ars 1)
 
-(Equal k (HAll a_type a_body) (HAll b_type b_body) depth subst ars) =
-  (TripGet (Equal k a_type b_type depth subst ars) λsubst λars λtype_eq
-  (TripGet (Equal k (a_body (HLev "" depth)) (b_body (HLev "" depth)) (+ depth 1) subst ars) λsubst λars λbody_eq
+(Equal file k (HAll a_type a_body) (HAll b_type b_body) depth subst ars) =
+  (TripGet (Equal file k a_type b_type depth subst ars) λsubst λars λtype_eq
+  (TripGet (Equal file k (a_body (HLev "" depth)) (b_body (HLev "" depth)) (+ depth 1) subst ars) λsubst λars λbody_eq
   (Trip subst ars (& type_eq body_eq))))
 
-(Equal k (HLam a_body) (HLam b_body) depth subst ars) =
-  (TripGet (Equal k (a_body (HLev "" depth)) (b_body (HLev "" depth)) (+ depth 1) subst ars) λsubst λars λbody_eq
+(Equal file k (HLam a_body) (HLam b_body) depth subst ars) =
+  (TripGet (Equal file k (a_body (HLev "" depth)) (b_body (HLev "" depth)) (+ depth 1) subst ars) λsubst λars λbody_eq
   (Trip subst ars body_eq))
 
-(Equal k (HApp a_func a_argm) (HApp b_func b_argm) depth subst ars) =
-  (TripGet (Equal k a_func b_func depth subst ars) λsubst λars λfunc_eq
-  (TripGet (Equal k a_argm b_argm depth subst ars) λsubst λars λargm_eq
+(Equal file k (HApp a_func a_argm) (HApp b_func b_argm) depth subst ars) =
+  (TripGet (Equal file k a_func b_func depth subst ars) λsubst λars λfunc_eq
+  (TripGet (Equal file k a_argm b_argm depth subst ars) λsubst λars λargm_eq
   (Trip subst ars (& func_eq argm_eq))))
 
-(Equal k (HCt0 a.ctid) (HCt0 b.ctid) depth subst ars) =
-  (Equal.HCt0 k (== a.ctid b.ctid) (HCt0 a.ctid) (HCt0 b.ctid) depth subst ars)
+(Equal file k (HCt0 a.ctid) (HCt0 b.ctid) depth subst ars) =
+  (Equal.HCt0 file (Equal.Capts file k a.ctid b.ctid) (== a.ctid b.ctid) (HCt0 a.ctid) (HCt0 b.ctid) depth subst ars)
 
-  (Equal.HCt0 0 0 a             b             depth subst ars) = (Trip subst ars 0)
-  (Equal.HCt0 1 0 a             b             depth subst ars) = (Capt a b subst ars)
-  (Equal.HCt0 k 1 (HCt0 a.ctid) (HCt0 b.ctid) depth subst ars) = (Trip subst ars 1)
+  (Equal.HCt0 file 0 0 a             b             depth subst ars) = (Trip subst ars 0)
+  (Equal.HCt0 file 1 0 a             b             depth subst ars) = (Capt file a b subst ars)
+  (Equal.HCt0 file k 1 (HCt0 a.ctid) (HCt0 b.ctid) depth subst ars) = (Trip subst ars 1)
 
-(Equal k (HCt1 a.ctid a.a) (HCt1 b.ctid b.a) depth subst ars) =
-  (Equal.HCt1 k (== a.ctid b.ctid) (HCt1 a.ctid a.a) (HCt1 b.ctid b.a) depth subst ars)
+(Equal file k (HCt1 a.ctid a.a) (HCt1 b.ctid b.a) depth subst ars) =
+  (Equal.HCt1 file (Equal.Capts file k a.ctid b.ctid) (== a.ctid b.ctid) (HCt1 a.ctid a.a) (HCt1 b.ctid b.a) depth subst ars)
 
-  (Equal.HCt1 0 0 a                 b                 depth subst ars) = (Trip subst ars 0)
-  (Equal.HCt1 1 0 a                 b                 depth subst ars) = (Capt a b subst ars)
-  (Equal.HCt1 k 1 (HCt1 a.ctid a.a) (HCt1 b.ctid b.a) depth subst ars) =
-    (TripGet (Equal k a.a b.a depth subst ars) λsubst λars λa.eq
+  (Equal.HCt1 file 0 0 a                 b                 depth subst ars) = (Trip subst ars 0)
+  (Equal.HCt1 file 1 0 a                 b                 depth subst ars) = (Capt file a b subst ars)
+  (Equal.HCt1 file k 1 (HCt1 a.ctid a.a) (HCt1 b.ctid b.a) depth subst ars) =
+    (TripGet (Equal file k a.a b.a depth subst ars) λsubst λars λa.eq
     (Trip subst ars a.eq))
 
-(Equal k (HCt2 a.ctid a.a a.b) (HCt2 b.ctid b.a b.b) depth subst ars) =
-  (Equal.HCt2 k (== a.ctid b.ctid) (HCt2 a.ctid a.a a.b) (HCt2 b.ctid b.a b.b) depth subst ars)
+(Equal file k (HCt2 a.ctid a.a a.b) (HCt2 b.ctid b.a b.b) depth subst ars) =
+  (Equal.HCt2 file (Equal.Capts file k a.ctid b.ctid) (== a.ctid b.ctid) (HCt2 a.ctid a.a a.b) (HCt2 b.ctid b.a b.b) depth subst ars)
 
-  (Equal.HCt2 0 0 a                     b                     depth subst ars) = (Trip subst ars 0)
-  (Equal.HCt2 1 0 a                     b                     depth subst ars) = (Capt a b subst ars)
-  (Equal.HCt2 k 1 (HCt2 a.ctid a.a a.b) (HCt2 b.ctid b.a b.b) depth subst ars) =
-    (TripGet (Equal k a.a b.a depth subst ars) λsubst λars λa.eq
-    (TripGet (Equal k a.b b.b depth subst ars) λsubst λars λb.eq
+  (Equal.HCt2 file 0 0 a                     b                     depth subst ars) = (Trip subst ars 0)
+  (Equal.HCt2 file 1 0 a                     b                     depth subst ars) = (Capt file a b subst ars)
+  (Equal.HCt2 file k 1 (HCt2 a.ctid a.a a.b) (HCt2 b.ctid b.a b.b) depth subst ars) =
+    (TripGet (Equal file k a.a b.a depth subst ars) λsubst λars λa.eq
+    (TripGet (Equal file k a.b b.b depth subst ars) λsubst λars λb.eq
     (Trip subst ars (& a.eq b.eq))))
 
-(Equal k (HCt3 a.ctid a.a a.b a.c) (HCt3 b.ctid b.a b.b b.c) depth subst ars) =
-  (Equal.HCt3 k (== a.ctid b.ctid) (HCt3 a.ctid a.a a.b a.c) (HCt3 b.ctid b.a b.b b.c) depth subst ars)
+(Equal file k (HCt3 a.ctid a.a a.b a.c) (HCt3 b.ctid b.a b.b b.c) depth subst ars) =
+  (Equal.HCt3 file (Equal.Capts file k a.ctid b.ctid) (== a.ctid b.ctid) (HCt3 a.ctid a.a a.b a.c) (HCt3 b.ctid b.a b.b b.c) depth subst ars)
 
-  (Equal.HCt3 0 0 a                         b                         depth subst ars) = (Trip subst ars 0)
-  (Equal.HCt3 1 0 a                         b                         depth subst ars) = (Capt a b subst ars)
-  (Equal.HCt3 k 1 (HCt3 a.ctid a.a a.b a.c) (HCt3 b.ctid b.a b.b b.c) depth subst ars) =
-    (TripGet (Equal k a.a b.a depth subst ars) λsubst λars λa.eq
-    (TripGet (Equal k a.b b.b depth subst ars) λsubst λars λb.eq
-    (TripGet (Equal k a.c b.c depth subst ars) λsubst λars λc.eq
+  (Equal.HCt3 file 0 0 a                         b                         depth subst ars) = (Trip subst ars 0)
+  (Equal.HCt3 file 1 0 a                         b                         depth subst ars) = (Capt file a b subst ars)
+  (Equal.HCt3 file k 1 (HCt3 a.ctid a.a a.b a.c) (HCt3 b.ctid b.a b.b b.c) depth subst ars) =
+    (TripGet (Equal file k a.a b.a depth subst ars) λsubst λars λa.eq
+    (TripGet (Equal file k a.b b.b depth subst ars) λsubst λars λb.eq
+    (TripGet (Equal file k a.c b.c depth subst ars) λsubst λars λc.eq
     (Trip subst ars (& a.eq (& b.eq c.eq))))))
 
-(Equal k (HCt4 a.ctid a.a a.b a.c a.d) (HCt4 b.ctid b.a b.b b.c b.d) depth subst ars) =
-  (Equal.HCt4 k (== a.ctid b.ctid) (HCt4 a.ctid a.a a.b a.c a.d) (HCt4 b.ctid b.a b.b b.c b.d) depth subst ars)
+(Equal file k (HCt4 a.ctid a.a a.b a.c a.d) (HCt4 b.ctid b.a b.b b.c b.d) depth subst ars) =
+  (Equal.HCt4 file (Equal.Capts file k a.ctid b.ctid) (== a.ctid b.ctid) (HCt4 a.ctid a.a a.b a.c a.d) (HCt4 b.ctid b.a b.b b.c b.d) depth subst ars)
 
-  (Equal.HCt4 1 1 a                             b                             depth subst ars) = (Trip subst ars 0)
-  (Equal.HCt4 1 0 a                             b                             depth subst ars) = (Capt a b subst ars)
-  (Equal.HCt4 k 1 (HCt4 a.ctid a.a a.b a.c a.d) (HCt4 b.ctid b.a b.b b.c b.d) depth subst ars) =
-    (TripGet (Equal k a.a b.a depth subst ars) λsubst λars λa.eq
-    (TripGet (Equal k a.b b.b depth subst ars) λsubst λars λb.eq
-    (TripGet (Equal k a.c b.c depth subst ars) λsubst λars λc.eq
-    (TripGet (Equal k a.d b.d depth subst ars) λsubst λars λd.eq
+  (Equal.HCt4 file 0 0 a                             b                             depth subst ars) = (Trip subst ars 0)
+  (Equal.HCt4 file 1 0 a                             b                             depth subst ars) = (Capt file a b subst ars)
+  (Equal.HCt4 file k 1 (HCt4 a.ctid a.a a.b a.c a.d) (HCt4 b.ctid b.a b.b b.c b.d) depth subst ars) =
+    (TripGet (Equal file k a.a b.a depth subst ars) λsubst λars λa.eq
+    (TripGet (Equal file k a.b b.b depth subst ars) λsubst λars λb.eq
+    (TripGet (Equal file k a.c b.c depth subst ars) λsubst λars λc.eq
+    (TripGet (Equal file k a.d b.d depth subst ars) λsubst λars λd.eq
     (Trip subst ars (& a.eq (& b.eq (& c.eq d.eq))))))))
 
-(Equal k (HMet a_hash) (HMet b_hash) depth subst ars) =
+(Equal file k (HMet a_hash) (HMet b_hash) depth subst ars) =
   (Trip subst ars 1)
 
-(Equal k (HMet a_hash) b depth subst ars) = (TripGet (Get subst a_hash) λsubst λars λgot_a (Equal.Got.0 k a_hash got_a b depth subst ars))
-  (Equal.Got.0 k a_hash None     b depth subst ars) = (Trip (Set subst a_hash b) ars 1)
-  (Equal.Got.0 k a_hash (Some a) b depth subst ars) = (Equal k a b depth subst ars)
+(Equal file k (HMet a_hash) b depth subst ars) = (TripGet (Get subst a_hash) λsubst λars λgot_a (Equal.Got.0 file k a_hash got_a b depth subst ars))
+  (Equal.Got.0 file k a_hash None     b depth subst ars) = (Trip (Set subst a_hash b) ars 1)
+  (Equal.Got.0 file k a_hash (Some a) b depth subst ars) = (Equal file k a b depth subst ars)
 
-(Equal k a (HMet b_hash) depth subst ars) = (TripGet (Get subst b_hash) λsubst λars λgot_b (Equal.Got.1 k b_hash a got_b depth subst ars))
-  (Equal.Got.1 k b_hash a None     depth subst ars) = (Trip (Set subst b_hash a) ars 1)
-  (Equal.Got.1 k b_hash a (Some b) depth subst ars) = (Equal k a b depth subst ars)
+(Equal file k a (HMet b_hash) depth subst ars) = (TripGet (Get subst b_hash) λsubst λars λgot_b (Equal.Got.1 file k b_hash a got_b depth subst ars))
+  (Equal.Got.1 file k b_hash a None     depth subst ars) = (Trip (Set subst b_hash a) ars 1)
+  (Equal.Got.1 file k b_hash a (Some b) depth subst ars) = (Equal file k a b depth subst ars)
 
-(Equal 0 a b depth subst ars) =
+(Equal file k a b depth subst ars) =
   (Trip subst ars 0)
-(Equal 1 a b depth subst ars) =
-  (Capt a b subst ars)
 
-(Capt a b subst ars) =
+//(Equal file 1 a b depth subst ars) =
+  //(Capt file a b subst ars)
+
+(Equal.Capts file k a.ctid b.ctid) =
+  (U32.And k (& (File.IsCtr file a.ctid) (File.IsCtr file b.ctid)))
+
+(Capt file a b subst ars) =
   let a_s = (Show (Low a) (File.Make []))
   let b_s = (Show (Low b) (File.Make []))
   let var = (HVar (Name.Make (StrFlatten [a_s " == " b_s]))) // fixme: temporary hack for visualization, until equality is implemented
@@ -1604,6 +1626,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Succ n:(Nat)) : Nat
 
     (Double n:(Nat)) : (Nat)
+    (Double (Zero)) = (Zero)
 
     (Head t:Type x:(List t))    : t
     (Head t      (Cons t x xs)) = x

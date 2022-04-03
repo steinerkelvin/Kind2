@@ -488,6 +488,14 @@ ParseEnd = λcode (ParseEnd.Go code)
   (Bind (ParseUntil (MatchText ")") ParseTerm) λargs
   (Done (Ctr name args))))))
 
+// (ParseEql) : (Parser (Maybe Term)) 
+(ParseEql) = (Guard (MatchText "{")
+  (Bind ParseTerm       λval0
+  (Bind (ParseText "=") λskip
+  (Bind ParseTerm       λval1
+  (Bind (ParseText "}") λx
+  (Done (Eql val0 val1)))))))
+
 // (ParseMet) : (Parser (Maybe Term))
 (ParseMet) = (Guard (MatchText "_")
   (Bind ParseName λname
@@ -501,6 +509,7 @@ ParseEnd = λcode (ParseEnd.Go code)
   ParseCtr,
   ParseAll,
   ParseLam,
+  ParseEql,
   ParseApp,
   ParseTyp,
   ParseMet,
@@ -590,6 +599,10 @@ NameTable.Empty = (NameTable Empty Array.Empty)
   let hash = (String.Hash name)
   (Pair.Get (Get n2i hash) λn2i λgot
   (Finalize.Ctr got name hash args (NameTable n2i i2n)))
+(Finalize (Eql val0 val1) ntab) =
+  ((Finalize val0 ntab) λntab λval0
+  ((Finalize val1 ntab) λntab λval1
+  λt (t ntab (Eql val0 val1))))
 
 (Finalize.Ctr None name hash args (NameTable n2i (Array size tree))) =
   let n2i = (Set n2i hash size)
@@ -848,6 +861,13 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       ((String.Show.Go ":")
       ((Term.Show.Go expr file)
       x)))
+  (Term.Show.Go (Eql val0 val1) file) =
+    λx((String.Show.Go "{")
+      ((Term.Show.Go val0 file)
+      ((String.Show.Go " = ")
+      ((Term.Show.Go val1 file)
+      ((String.Show.Go "}")
+      x)))))
   (Term.Show.Go.CtrName id file) =
     (Maybe.Case (File.IdToName file id)
       (String.Show.Go (U32.Show id))
@@ -923,6 +943,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Subst nm val (Ct2 ctid a b))       = (Ct2 ctid (Subst nm val a) (Subst nm val b))
 (Subst nm val (Ct3 ctid a b c))     = (Ct3 ctid (Subst nm val a) (Subst nm val b) (Subst nm val c))
 (Subst nm val (Ct4 ctid a b c d))   = (Ct4 ctid (Subst nm val a) (Subst nm val b) (Subst nm val c) (Subst nm val d))
+(Subst nm val (Eql val0 val1))      = (Eql (Subst nm val val0) (Subst nm val val1))
 
 // (Subst.Body String Term String Term) : Term
 (Subst.Body nm val name body) = (Subst.Body.Go (Name.Equal nm name) nm val body)
@@ -949,6 +970,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Uses nm (Ct2 ctid a b))       = (+ (Uses nm a) (Uses nm b))
 (Uses nm (Ct3 ctid a b c))     = (+ (Uses nm a) (+ (Uses nm b) (Uses nm c)))
 (Uses nm (Ct4 ctid a b c d))   = (+ (+ (Uses nm a) (Uses nm b)) (+ (Uses nm c) (Uses nm d)))
+(Uses nm (Eql val0 val1))      = (+ (Uses nm val0) (Uses nm val1))
 (Uses.Shadow 0 nm body)        = (Uses nm body)
 (Uses.Shadow 1 nm body)        = 0
 
@@ -1006,25 +1028,25 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   (High.Go (Ct0 ctid) file vars) =
     (Pair.Get (File.GotFunc file ctid) λfile λfunc
-    (HighGo.Ctr func (HCt0 ctid) file vars))
+    (High.Go.Ctr func (HCt0 ctid) file vars))
 
   (High.Go (Ct1 ctid a) file vars) =
     (Pair.Get (File.GotFunc file ctid) λfile λfunc
     (Trip.Get (High.Go a file vars) λfile λvars λa
-    (HighGo.Ctr func (HCt1 ctid a) file vars)))
+    (High.Go.Ctr func (HCt1 ctid a) file vars)))
 
   (High.Go (Ct2 ctid a b) file vars) =
     (Pair.Get (File.GotFunc file ctid) λfile λfunc
     (Trip.Get (High.Go a file vars) λfile λvars λa
     (Trip.Get (High.Go b file vars) λfile λvars λb
-    (HighGo.Ctr func (HCt2 ctid a b) file vars))))
+    (High.Go.Ctr func (HCt2 ctid a b) file vars))))
 
   (High.Go (Ct3 ctid a b c) file vars) =
     (Pair.Get (File.GotFunc file ctid) λfile λfunc
     (Trip.Get (High.Go a file vars) λfile λvars λa
     (Trip.Get (High.Go b file vars) λfile λvars λb
     (Trip.Get (High.Go c file vars) λfile λvars λc
-    (HighGo.Ctr func (HCt3 ctid a b c) file vars)))))
+    (High.Go.Ctr func (HCt3 ctid a b c) file vars)))))
 
   (High.Go (Ct4 ctid a b c d) file vars) =
     (Pair.Get (File.GotFunc file ctid) λfile λfunc
@@ -1032,13 +1054,19 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Trip.Get (High.Go b file vars) λfile λvars λb
     (Trip.Get (High.Go c file vars) λfile λvars λc
     (Trip.Get (High.Go d file vars) λfile λvars λd
-    (HighGo.Ctr func (HCt4 ctid a b c d) file vars))))))
+    (High.Go.Ctr func (HCt4 ctid a b c d) file vars))))))
 
   (High.Go (Arg name expr) file vars) = 
     (High.Go expr file vars)
 
-  (HighGo.Ctr None                        term file vars) = (Trip file vars term)
-  (HighGo.Ctr (Some (Func lty rty rules)) term file vars) = (HFindMatchingRule rules term file vars)
+  // TODO
+  (High.Go (Eql val0 val1) file vars) =
+    (Trip.Get (High.Go val0 file vars) λfile λvars λval0
+    (Trip.Get (High.Go val1 file vars) λfile λvars λval1
+    (Trip file vars (HEql val0 val1))))
+
+  (High.Go.Ctr None                        term file vars) = (Trip file vars term)
+  (High.Go.Ctr (Some (Func lty rty rules)) term file vars) = (HFindMatchingRule rules term file vars)
 
   (High.Go (Met hash) file vars) =
     (Trip file vars (HMet hash))
@@ -1203,6 +1231,11 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     let d = (Low.Go d depth)
     (Ct4 ctid a b c d)
 
+  (Low.Go (HEql val0 val1) depth) =
+    let val0 = (Low.Go val0 depth)
+    let val1 = (Low.Go val1 depth)
+    (Eql val0 val1)
+
 // Normalizes a term
 (Normal file term) = (Low (High file term Nil))
 
@@ -1277,6 +1310,11 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
         (Checked eqs ars (fbody (High file argm Nil))))
       (Infer.Go.App file other argm ctx eqs ars) =
         (Errored "Non-function application.")
+
+  (Infer.Go file (Eql val0 val1) ctx eqs ars) =
+    (Chain (Infer.Go file val0 ctx eqs ars) λeqs λars λval0_t
+    (Chain (Infer.Go file val1 ctx eqs ars) λeqs λars λval1_t
+    (Checked eqs ars HTyp)))
 
   // Ctr checker
   (Infer.Go file (Ct0 id)         ctx eqs ars) = (Infer.Go.Ctr.FindFunc file id (Ct0 id)         ctx eqs ars)
@@ -1454,6 +1492,11 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Trip.Get (Equal file k a.d b.d depth subst ars) λsubst λars λd.eq
     (Trip subst ars (& a.eq (& b.eq (& c.eq d.eq))))))))
 
+(Equal file k (HEql a_val0 a_val1) (HEql b_val0 b_val1) depth subst ars) =
+  (Trip.Get (Equal file k a_val0 b_val0 depth subst ars) λsubst λars λval0_eq
+  (Trip.Get (Equal file k a_val1 b_val1 depth subst ars) λsubst λars λval1_eq
+  (Trip subst ars (& val0_eq val1_eq))))
+
 (Equal file k (HMet a_hash) (HMet b_hash) depth subst ars) =
   (Trip subst ars 1)
 
@@ -1475,10 +1518,11 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (U32.And k (& (File.IsCtr file a.ctid) (File.IsCtr file b.ctid)))
 
 (Capt file a b subst ars) =
-  let a_s = (Term.Show (File.Make []) (Low a))
-  let b_s = (Term.Show (File.Make []) (Low b))
-  let var = (HVar (Name.Make (String.Flatten [a_s " == " b_s]))) // fixme: temporary hack for visualization, until equality is implemented
-  let ars = (Cons (Pair (Name.Make "E") var) ars)
+  //let a_s = (Term.Show (File.Make []) (Low a))
+  //let b_s = (Term.Show (File.Make []) (Low b))
+  //let var = (HVar (Name.Make (String.Flatten [a_s " == " b_s]))) // fixme: temporary hack for visualization, until equality is implemented
+  let cap = (HEql a b)
+  let ars = (Cons (Pair (Name.Make "E") cap) ars)
   (Trip subst ars 1)
 
 // (Subst.Holes Subst Term) : Term
@@ -1496,6 +1540,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Subst.Holes subst (HCt2 ctid a b))     = (HCt2 ctid (Subst.Holes subst a) (Subst.Holes subst b))
 (Subst.Holes subst (HCt3 ctid a b c))   = (HCt3 ctid (Subst.Holes subst a) (Subst.Holes subst b) (Subst.Holes subst c))
 (Subst.Holes subst (HCt4 ctid a b c d)) = (HCt4 ctid (Subst.Holes subst a) (Subst.Holes subst b) (Subst.Holes subst c) (Subst.Holes subst d))
+(Subst.Holes subst (HEql val0 val1))    = (HEql (Subst.Holes subst val0) (Subst.Holes subst val1))
 (Subst.Holes subst (HMet hash))         = (Pair.Get (Get subst hash) λsubst λgot (Subst.HolesGot subst hash got))
   (Subst.HolesGot subst hash None)      = (HMet hash)
   (Subst.HolesGot subst hash (Some x))  = (Subst.Holes subst x)
@@ -1644,6 +1689,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   let file = (File.Read Test.Equal)
   (Verify.File file)
+
 
   //let term = (Term.Read file "(Main)")
   //(Term.Show file (Normal file term))

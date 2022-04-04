@@ -55,9 +55,10 @@
 // Maybe
 // =====
 
-// (Maybe.Case (Maybe a) (∀a p) p) : p
+// (Maybe.Case (Maybe a) p (∀a p)) : p
 (Maybe.Case (Some x) case_none case_some) = (case_some x)
 (Maybe.Case None     case_none case_some) = case_none
+
 
 
 // List
@@ -844,7 +845,6 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (File.Make.LHS (Ct6 ctid a b c d e f) rhs) = (Ct6 ctid (File.Make.LHS a rhs) (File.Make.LHS b rhs) (File.Make.LHS c rhs) (File.Make.LHS d rhs) (File.Make.LHS e rhs) (File.Make.LHS f rhs))
 
 
-
 // (File.GetNameTable File) : NameTable
 (File.GetNameTable (File ntab funs)) = ntab
 
@@ -1612,14 +1612,14 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       (Infer.Go.Ctr.MakeList file ctid lty rty term ctx eqs ars))))
   
     // 2. Convert types and args to lists
-    (Infer.Go.Ctr.MakeList file ctid (Ct0 t.id)                   rt (Ct0 id)         ctx eqs ars)     = (Infer.Go.Ctr.CheckList file []                  []            rt [] ctx eqs ars)
-    (Infer.Go.Ctr.MakeList file ctid (Ct1 t.id at)                rt (Ct1 id a)       ctx eqs ars)     = (Infer.Go.Ctr.CheckList file [at]                [a]           rt [] ctx eqs ars)
-    (Infer.Go.Ctr.MakeList file ctid (Ct2 t.id at bt)             rt (Ct2 id a b)     ctx eqs ars)     = (Infer.Go.Ctr.CheckList file [at bt]             [a b]         rt [] ctx eqs ars)
-    (Infer.Go.Ctr.MakeList file ctid (Ct3 t.id at bt ct)          rt (Ct3 id a b c)   ctx eqs ars)     = (Infer.Go.Ctr.CheckList file [at bt ct]          [a b c]       rt [] ctx eqs ars)
-    (Infer.Go.Ctr.MakeList file ctid (Ct4 t.id at bt ct dt)       rt (Ct4 id a b c d) ctx eqs ars)     = (Infer.Go.Ctr.CheckList file [at bt ct dt]       [a b c d]     rt [] ctx eqs ars)
-    (Infer.Go.Ctr.MakeList file ctid (Ct5 t.id at bt ct dt et)    rt (Ct5 id a b c d e) ctx eqs ars)   = (Infer.Go.Ctr.CheckList file [at bt ct dt et]    [a b c d e]   rt [] ctx eqs ars)
+    (Infer.Go.Ctr.MakeList file ctid (Ct0 t.id)                   rt (Ct0 id)             ctx eqs ars) = (Infer.Go.Ctr.CheckList file []                  []            rt [] ctx eqs ars)
+    (Infer.Go.Ctr.MakeList file ctid (Ct1 t.id at)                rt (Ct1 id a)           ctx eqs ars) = (Infer.Go.Ctr.CheckList file [at]                [a]           rt [] ctx eqs ars)
+    (Infer.Go.Ctr.MakeList file ctid (Ct2 t.id at bt)             rt (Ct2 id a b)         ctx eqs ars) = (Infer.Go.Ctr.CheckList file [at bt]             [a b]         rt [] ctx eqs ars)
+    (Infer.Go.Ctr.MakeList file ctid (Ct3 t.id at bt ct)          rt (Ct3 id a b c)       ctx eqs ars) = (Infer.Go.Ctr.CheckList file [at bt ct]          [a b c]       rt [] ctx eqs ars)
+    (Infer.Go.Ctr.MakeList file ctid (Ct4 t.id at bt ct dt)       rt (Ct4 id a b c d)     ctx eqs ars) = (Infer.Go.Ctr.CheckList file [at bt ct dt]       [a b c d]     rt [] ctx eqs ars)
+    (Infer.Go.Ctr.MakeList file ctid (Ct5 t.id at bt ct dt et)    rt (Ct5 id a b c d e)   ctx eqs ars) = (Infer.Go.Ctr.CheckList file [at bt ct dt et]    [a b c d e]   rt [] ctx eqs ars)
     (Infer.Go.Ctr.MakeList file ctid (Ct6 t.id at bt ct dt et ft) rt (Ct6 id a b c d e f) ctx eqs ars) = (Infer.Go.Ctr.CheckList file [at bt ct dt et ft] [a b c d e f] rt [] ctx eqs ars)
-    (Infer.Go.Ctr.MakeList file ctid a                      rt b                ctx eqs ars) = (Errored (String.Concat "Bad call: " (Term.Show file b)))
+    (Infer.Go.Ctr.MakeList file ctid a                            rt b                    ctx eqs ars) = (Errored (String.Concat "Bad call: " (Term.Show file b)))
 
     // 3. Recursively checks the lists
     (Infer.Go.Ctr.CheckList file Nil Nil rtyp sub ctx eqs ars) =
@@ -1686,7 +1686,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       "Type mismatch." NewLine
       "- Expected: " (Term.Show file (Low (Holes.Subst subst a))) NewLine
       "- Detected: " (Term.Show file (Low (Holes.Subst subst b))) NewLine
-      (Context.Show (List.Map ctx λp(Pair.MutSnd p λx(Low (Holes.Subst subst x)))) file)
+      (Context.Show (List.Map ctx λp(Pair.MutSnd p λx(Low (Holes.Subst subst x)))) file) NewLine
     ])
     (Unify.Go file capt eqs ext subst (Cons err errs))
   (UnifyTest file capt 1 a b ctx eqs ext subst errs) =
@@ -1955,8 +1955,11 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Verify.Rule.List file [a.typ b.typ c.typ d.typ e.typ f.typ g.typ] r.typ [a.val b.val c.val d.val e.val f.val g.typ] r.val)
 (Verify.Rule file (Ct8 typ.ctid a.typ b.typ c.typ d.typ e.typ f.typ g.typ h.typ) r.typ (Ct8 val.ctid a.val b.val c.val d.val e.val f.val g.typ h.typ) r.val) =
   (Verify.Rule.List file [a.typ b.typ c.typ d.typ e.typ f.typ g.typ h.typ] r.typ [a.val b.val c.val d.val e.val f.val g.typ h.typ] r.val)
-(Verify.Rule file a r.typ b r.val) =
-  (Errored "Rule arity mismatch.")
+(Verify.Rule file a.typ r.typ a.val r.val) =
+  let rule_name = (Maybe.Case (File.IdToName file (Ctr.GetId a.val)) "?" λx(x))
+  (Errored (String.Flatten [
+    "Mistyped rule: " rule_name NewLine NewLine 
+  ]))
 
 // (Verify.Rule.List File Term Term Term Term) : (Result (Map HTerm))
 (Verify.Rule.List file typs r.typ vals r.val) =
@@ -2077,10 +2080,6 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       let e1 = (Cong _ _ _ λx(Succ x) e0)
       let e2 = (Cong _ _ _ λx(Succ x) e1)
       e2
-
-    // Test
-    (Main n:Nat m:Bool) : Bool
-    (Main n m) = ?tmp
 "
 
 (Kind2 code) = (Kind2.Go (File.Read code))

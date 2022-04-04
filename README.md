@@ -21,7 +21,7 @@ cargo install kind2
 
 ### 2. Create a Kind2 file
 
-Kind2 files look like [HVM](https://github.com/kind2/. Save the file below as `main.hvm`:
+Kind2 files look like [HVM](https://github.com/kind2/). Save the file below as `main.hvm`:
 
 ```javascript
 // Booleans

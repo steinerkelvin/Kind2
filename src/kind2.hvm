@@ -1,4 +1,5 @@
 // TODO: File is used non-linearly many time, fixing might optimize many functions
+// FIXME: syntax error on `TF : (Not (T == F))`
 
 // #############################################################################
 // # Prelude                                                                   #
@@ -1873,7 +1874,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Holes.Count (Ask name))                = 0
 (Holes.Count (Ann xval xtyp))           = (+ (Holes.Count xval) (Holes.Count xtyp))
 (Holes.Count (Let name expr body))      = (+ (Holes.Count expr) (Holes.Count body))
-(Holes.Count (All type body))           = (+ (Holes.Count type) (Holes.Count body))
+(Holes.Count (All name type body))      = (+ (Holes.Count type) (Holes.Count body))
 (Holes.Count (Lam name body))           = (Holes.Count body)
 (Holes.Count (App func argm))           = (+ (Holes.Count func) (Holes.Count argm))
 (Holes.Count (Ct0 ctid))                = 0

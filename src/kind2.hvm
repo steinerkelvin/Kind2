@@ -203,6 +203,8 @@ NewLine = (StrCons 10 StrNil)
   (Braun.ToList.Go (Braun.Tie l x r)) = λz((Braun.ToList.Go l) (Cons x ((Braun.ToList.Go r) z)))
   (Braun.ToList.Go Braun.Tip)         = λz(z)
 
+
+
 // Map
 // ===
 
@@ -1956,7 +1958,6 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
 
 (Test.Equal) = "
-
   // Booleans
   Bool : Type
     True  : Bool
@@ -2050,16 +2051,10 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       e2
 "
 
-(Main n) = (Main.Go (File.Read Test.Equal))
-  (Main.Go (Er err))  = err
-  (Main.Go (Ok file)) =
-    (Verify.File file)
-    //let term = (Term.Read file "(Main)")
-    //(Term.Show file (Normal file term))
+(Kind2 code) = (Kind2.Go (File.Read code))
+  (Kind2.Go (Er err))  = err
+  (Kind2.Go (Ok file)) = (Verify.File file)
 
-// 6996072 ....... 
-// 6764632 / 23521
-// 6785093 / 23521
-// 7981162 / 23521
-// 8157098 / 23521
-// 8589622 / 23521
+(Main n) = (Kind2 Test.Equal)
+  //let term = (Term.Read file "(Main)")
+  //(Term.Show file (Normal file term))

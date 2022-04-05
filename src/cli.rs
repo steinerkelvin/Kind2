@@ -16,6 +16,15 @@ pub enum CliCmd {
     ///// Input file
     //file: String,
   //},
+  
+  /// Runs the Main term of a Kind2 file
+  Run { 
+    /// Input file
+    file: String,
+    #[clap(short, long)]
+    debug: bool,
+  },
+
   /// Checks a Kind2 file
   Check { 
     /// Input file

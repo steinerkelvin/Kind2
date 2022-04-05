@@ -372,10 +372,10 @@ NewLine = (StrCons 10 StrNil)
   (Skipper.Go 1 c x xs)   = (Skipper xs)
   (Skipper.Go s 1 x xs)   = (Skipper.DropComment xs)
 
-  (Skipper.DropComment StrNil) = StrNil
+  (Skipper.DropComment StrNil)         = StrNil
   (Skipper.DropComment (StrCons x xs)) = (Skipper.DropComment.Go (== x 10) x xs) 
     
-    (Skipper.DropComment.Go 1 x xs) = xs
+    (Skipper.DropComment.Go 1 x xs) = (Skipper xs)
     (Skipper.DropComment.Go 0 x xs) = (Skipper.DropComment xs)
 
 // (ParseNameHere) : (Parser String)
@@ -522,17 +522,17 @@ ParseEnd = λcode (ParseEnd.Go code)
 
 // (ParseAnnEql) : (Parser (Maybe Term))
 (ParseAnnEql) = (Guard (MatchText "{")
-  (Bind ParseTerm       λval0
-  (Bind (MatchText ":") λanns
+  (Bind ParseTerm        λval0
+  (Bind (MatchText "::") λanns
   (ParseAnnEqlGo anns val0))))
 (ParseAnnEqlGo True val0) =
   (Bind ParseTerm       λval1
   (Bind (ParseText "}") λskip
   (Done (Ann val0 val1))))
 (ParseAnnEqlGo False val0) =
-  (Bind (ParseText "=") λskip
-  (Bind ParseTerm       λval1
-  (Bind (ParseText "}") λskip
+  (Bind (ParseText "==") λskip
+  (Bind ParseTerm        λval1
+  (Bind (ParseText "}")  λskip
   (Done (Eql val0 val1)))))
 
 // (ParseRfl) : (Parser (Maybe Term))
@@ -545,14 +545,14 @@ ParseEnd = λcode (ParseEnd.Go code)
   (Done Met))
 
 // (ParseAnn) : (Parser (Maybe (∀Term Term)))
-(ParseAnn) = (Guard (MatchText "::")
-  (Bind ParseTerm λtype
-  (Done λterm(Ann term type))))
+//(ParseAnn) = (Guard (MatchText "::")
+  //(Bind ParseTerm λtype
+  //(Done λterm(Ann term type))))
 
 // (ParseEql) : (Parser (Maybe (∀Term Term)))
-(ParseEql) = (Guard (MatchText "==")
-  (Bind ParseTerm λval1
-  (Done λval0(Eql val0 val1))))
+//(ParseEql) = (Guard (MatchText "==")
+  //(Bind ParseTerm λval1
+  //(Done λval0(Eql val0 val1))))
 
 // (ParseTerm) : (Parser Term)
 (ParseTerm) =
@@ -572,13 +572,14 @@ ParseEnd = λcode (ParseEnd.Go code)
     ParseAsk,
     ParseRfl,
     ParseRwt,
+    ParseAnnEql,
     ParseMet,
     ParseVar,
   ])
 
   (ParseTerm.End) = (Grammar [
-    (ParseAnn)
-    (ParseEql)
+    //(ParseAnn)
+    //(ParseEql)
     (Done (Some λx(x)))
   ])
 
@@ -604,7 +605,7 @@ ParseEnd = λcode (ParseEnd.Go code)
   ParseDecl)
 
 // (Term.Read File String) : Term
-(Term.Read file code) = ((Finalize (Term.Read.Got ((ParseTerm) code)) (File.GetNameTable file) 0) λntab λterm term)
+(Term.Read file code) = ((Finalize (Term.Read.Got ((ParseTerm) code)) (File.GetNameTable file) 0) λntab λmets λterm term)
   (Term.Read.Got (Parsed code term)) = term
   (Term.Read.Got (Failed err))       = (Var (String.Concat "[ParseError] " err))
 
@@ -2026,25 +2027,25 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (List.Head t (Cons t x xs)) = x
 
   // Symmetry of equality
-  (Sym t:Type a:t b:t e:(a == b)) : (b == a)
+  (Sym t:Type a:t b:t e:{a == b}) : {b == a}
     (Sym t a b e) =
-      rewrite x with e in (b == x)
+      rewrite x with e in {b == x}
       refl b
 
   // Transitivity of equality
-  (Trans t:Type a:t b:t c:t e0:(a == b) e1:(b == c)) : (a == c)
+  (Trans t:Type a:t b:t c:t e0:{a == b} e1:{b == c}) : {a == c}
   (Trans t a b c e0 e1) =
-    rewrite x with e0 in (x == c)
+    rewrite x with e0 in {x == c}
     e1
 
   // Congruence of equality
-  (Cong t:Type a:t b:u f:∀(x:t)u e:(a == b)) : ((f a) == (f b))
+  (Cong t:Type a:t b:u f:∀(x:t)u e:{a == b}) : {(f a) == (f b)}
     (Cong t a b f e) =
-      rewrite x with e in ((f x) == (f b))
+      rewrite x with e in {(f x) == (f b)}
       refl (f b)
 
   // Casting values to another equal type
-  (Cast a:Type b:Type e:(a == b) x:a) : b
+  (Cast a:Type b:Type e:{a == b} x:a) : b
     (Cast a b e x) =
       rewrite x with (Sym Type a b e) in x
       x
@@ -2059,7 +2060,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       (Refl t b)
 
   // Double Negation Theorem
-  (Bool.DNT b:Bool) : (Bool.Not (Bool.Not b)) == b
+  (Bool.DNT b:Bool) : {(Bool.Not (Bool.Not b)) == b}
     (Bool.DNT True)  = refl True
     (Bool.DNT False) = refl False
 
@@ -2069,7 +2070,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Equal.Bool.DNT False) = (Refl Bool False)
 
   // Black Friday Theorem
-  (Nat.BFT n:Nat) : (Nat.Half (Nat.Double n)) == n
+  (Nat.BFT n:Nat) : {(Nat.Half (Nat.Double n)) == n}
     (Nat.BFT Zero)            = refl Zero
     (Nat.BFT (Succ Zero))     = refl (Succ Zero)
     (Nat.BFT (Succ (Succ n))) =
@@ -2079,10 +2080,12 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       e2
 "
 
-(Kind2 code) = (Kind2.Go (File.Read code))
-  (Kind2.Go (Er err))  = err
-  (Kind2.Go (Ok file)) = (Verify.File file)
+(Kind2.Check code) = (Kind2.Check.Go (File.Read code))
+  (Kind2.Check.Go (Er err))  = err
+  (Kind2.Check.Go (Ok file)) = (Verify.File file)
 
-(Main n) = (Kind2 Test.Equal)
-  //let term = (Term.Read file "(Main)")
-  //(Term.Show file (Normal file term))
+(Kind2.Run code) = (Kind2.Run.Go (File.Read code) "(Main)")
+  (Kind2.Run.Go (Er err)  expr) = err
+  (Kind2.Run.Go (Ok file) expr) = (Term.Show file (Normal file (Term.Read file expr)))
+
+(Main n) = (Kind2.Check Test.Equal)

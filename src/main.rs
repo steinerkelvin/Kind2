@@ -29,6 +29,19 @@ fn run() -> Result<(), String> {
       //let code = load_file(&file)?;
       //Err("Compiling not implemented".to_string())
     //}
+    
+    cli::CliCmd::Run{ file, debug } => {
+      let code_str = load_file(&file)?;
+
+      // Grows the stack. Without this, the code overflows sometimes on debug
+      // mode. TODO: Investigate.
+      stacker::grow(
+        64 * MI, 
+        || do_the_thing(KIND2_HVM_CODE, "Kind2.Run", &code_str)
+      )?;
+      Ok(())
+    }
+
     cli::CliCmd::Check{ file, debug } => {
       let code_str = load_file(&file)?;
 
@@ -36,15 +49,16 @@ fn run() -> Result<(), String> {
       // mode. TODO: Investigate.
       stacker::grow(
         64 * MI, 
-        || do_the_thing(KIND2_HVM_CODE, &code_str)
+        || do_the_thing(KIND2_HVM_CODE, "Kind2.Check", &code_str)
       )?;
       Ok(())
     }
+
   }
 }
 
 // TODO: this will be renamed, eventually
-fn do_the_thing(kind2_code: &str, input_code: &str) -> Result<(), String> {
+fn do_the_thing(kind2_code: &str, call_fn_name: &str, call_fn_argm: &str) -> Result<(), String> {
   use hvm::language as lang;
   use hvm::runtime as rt;
   use hvm::rulebook as rb;
@@ -62,12 +76,12 @@ fn do_the_thing(kind2_code: &str, input_code: &str) -> Result<(), String> {
   // Builds dynamic functions
   let functions = bd::build_runtime_functions(&book);
 
-  let str_term = vm::build_str_term(input_code);
+  let str_term = vm::build_str_term(call_fn_argm);
 
   // dbg!(&str_term);
 
   let main_call = lang::Term::Ctr {
-    name: "Kind2".to_string(),
+    name: call_fn_name.to_string(),
     args: vec![ Box::new(str_term) ],
   };
   let main_pos = bd::alloc_term(&mut worker, &book, &main_call);

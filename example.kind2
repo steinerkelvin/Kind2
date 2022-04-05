@@ -1,0 +1,65 @@
+// The Empty type
+Empty : Type
+
+// Unit
+Unit : Type
+  U : Unit
+
+// Booleans
+Bool : Type
+  T : Bool
+  F : Bool
+
+// Natural numbers
+Nat : Type
+  Z       : Nat
+  (S Nat) : Nat
+
+// Propositional negation
+(Not t:Type) : Type
+(Not t) = ∀(x: t) Empty
+
+// If-Then-Else
+(If t:Type x:Bool a:t b:t) : t
+(If t T a b) = a
+(If t F a b) = b
+
+// Negates a boolean
+(Neg Bool) : Bool
+  (Neg T) = F
+  (Neg F) = T
+
+// Doubles a number
+(Double Nat) : Nat
+  (Double Z)        = Z
+  (Double (S pred)) = (S (S (Double pred)))
+
+// Halves a number
+(Half Nat) : Nat
+  (Half Z)            = Z
+  (Half (S Z))        = Z
+  (Half (S (S pred))) = (S (Half pred))
+
+// Congruence of equality
+(Cong t:Type a:t b:u f:∀(x:t)u e:{a == b}) : {(f a) == (f b)}
+  (Cong t a b f e) =
+    rewrite x with e in {(f x) == (f b)}
+    refl (f b)
+
+// Black Friday Theorem
+(BFT n:Nat) : {(Half (Double n)) == n}
+  (BFT Z) =
+    refl Z
+  (BFT (S p)) =
+    let e0 = (BFT p)
+    let e1 = (Cong _ _ _ λx(S x) e0)
+    e1
+
+// True isn't False
+TF : (Not {T == F})
+TF = λe
+  rewrite x with e in (If Type x Empty Unit)
+  U
+
+Main : Nat
+Main = Z

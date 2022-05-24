@@ -1,5 +1,7 @@
-// TODO: File is used non-linearly many time, fixing might optimize many functions
+// FIXME: File is used non-linearly many time, fixing might optimize many functions
 // FIXME: syntax error on `TF : (Not (T == F))`
+// FIXME: variables with same names are considered equal; add an unique id?
+// Rewrites: 32177923 for `{(Nat.Destroy (Nat.Pow2 16)) == Zero}`
 
 // #############################################################################
 // # Prelude                                                                   #
@@ -297,6 +299,26 @@ NewLine = (StrCons 10 StrNil)
 (IsLower chr) =
   (& (<= 'a' chr) (<= chr 'z'))
 
+// (IsNumeric Char) : U32
+(IsNumeric chr) =
+  (& (<= '0' chr) (<= chr '9'))
+
+// (IsOperator Char) : U32
+(IsOperator chr) =
+  (| (== '+' chr)
+  (| (== '-' chr)
+  (| (== '*' chr)
+  (| (== '/' chr)
+  (| (== '%' chr)
+  (| (== '&' chr)
+  (| (== '|' chr)
+  (| (== '^' chr)
+  (| (== '<' chr)
+  (| (== '>' chr)
+  (| (== '=' chr)
+  (| (== '!' chr)
+     0))))))))))))
+
 // (Bind a_parser:(Parser a) b_parser:(∀a (Parser B))) : (Parser B)
 (Bind a_parser b_parser) = λcode (Bind.Go b_parser (a_parser code))
   (Bind.Go b_parser (Parsed code a_val)) = (b_parser a_val code)
@@ -429,17 +451,21 @@ ParseEnd = λcode (ParseEnd.Go code)
 (ParseVar) = (Bind ParseName λname (ParseVar.0 name))
 
   (ParseVar.0 StrNil)         = (Done None)
-  (ParseVar.0 (StrCons x xs)) = (ParseVar.1 (IsUpper x) (StrCons x xs))
+  (ParseVar.0 (StrCons x xs)) = (ParseVar.1
+    (String.Equal (StrCons x xs) "Type")
+    (String.Equal (StrCons x xs) "U32")
+    (IsUpper x)
+    (IsNumeric x)
+    (StrCons x xs))
 
-  (ParseVar.1 1 str) = (Done (Some (Cts str [])))
-  (ParseVar.1 0 str) = (Bind (MatchText ":") λis_ann (ParseVar.2 (If is_ann 1 0) str)) 
+  (ParseVar.1 1 _ _ _ str) = (Done (Some Typ))
+  (ParseVar.1 _ 1 _ _ str) = (Done (Some U32))
+  (ParseVar.1 _ _ 1 _ str) = (Done (Some (Cts str [])))
+  (ParseVar.1 _ _ _ 1 str) = (Done (Some (N32 (U32.Read str))))
+  (ParseVar.1 _ _ _ _ str) = (Bind (MatchText ":") λis_ann (ParseVar.2 (If is_ann 1 _) str))
 
   (ParseVar.2 1 str) = (Bind ParseTerm λterm (Done (Some (Ann (Var (Name.Make str)) term))))
   (ParseVar.2 0 str) = (Done (Some (Var (Name.Make str))))
-
-// (ParseTyp) : (Parse (Maybe Term))
-(ParseTyp) = (Guard (MatchText "Type")
-  (Done Typ))
 
 // (ParseAsk) : (Parse (Maybe Term))
 (ParseAsk) = (Guard (MatchText "?")
@@ -509,6 +535,35 @@ ParseEnd = λcode (ParseEnd.Go code)
   (Bind (ParseUntil (MatchText ")") ParseTerm) λargs
   (Done (Cts name args))))))
 
+// (ParseO32) : (Parser (Maybe Term)) 
+(ParseO32) = (Guard (PeekConds [λx(== x '(') λx(IsOperator x)])
+  (Bind (ParseText "(") λskip
+  (Bind ParseOper λoper
+  (Bind ParseTerm λval0
+  (Bind ParseTerm λval1
+  (Bind (ParseText ")") λskip
+  (Done (O32 oper val0 val1))))))))
+
+(ParseOper) = (Grammar [
+  (Guard (MatchText "+")  (Done ADD))
+  (Guard (MatchText "-")  (Done SUB))
+  (Guard (MatchText "*")  (Done MUL))
+  (Guard (MatchText "/")  (Done DIV))
+  (Guard (MatchText "%")  (Done MOD))
+  (Guard (MatchText "&")  (Done AND))
+  (Guard (MatchText "|")  (Done OR))
+  (Guard (MatchText "^")  (Done XOR))
+  (Guard (MatchText "<<") (Done SHL))
+  (Guard (MatchText ">>") (Done SHR))
+  (Guard (MatchText "<")  (Done LTN))
+  (Guard (MatchText "<=") (Done LTE))
+  (Guard (MatchText "==") (Done EQL))
+  (Guard (MatchText ">=") (Done GTE))
+  (Guard (MatchText ">")  (Done GTN))
+  (Guard (MatchText "!=") (Done NEQ))
+  (Done (Some ADD)) // FIXME?
+])
+
 //rewrite x with e in goal
 // (ParseRwt) : (Parser (Maybe Term))
 (ParseRwt) = (Guard (MatchText "rewrite ")
@@ -555,10 +610,10 @@ ParseEnd = λcode (ParseEnd.Go code)
     ParseDef,
     ParseLet,
     ParseCts,
+    ParseO32,
     ParseAll,
     ParseLam,
     ParseApp,
-    ParseTyp,
     ParseAsk,
     ParseRfl,
     ParseRwt,
@@ -572,9 +627,6 @@ ParseEnd = λcode (ParseEnd.Go code)
     //(ParseEql)
     (Done (Some λx(x)))
   ])
-
-
-
 
 // (ParseDecl) : (Parser Decl)
 (ParseDecl) =
@@ -632,6 +684,14 @@ NameTable.Empty = (NameTable Empty Array.Empty)
   λt (t ntab (+ mets 1) (Met mets))
 (Finalize Typ ntab mets) =
   λt (t ntab mets Typ)
+(Finalize U32 ntab mets) =
+  λt (t ntab mets U32)
+(Finalize (N32 numb) ntab mets) =
+  λt (t ntab mets (N32 numb))
+(Finalize (O32 oper val0 val1) ntab mets) =
+  ((Finalize val0 ntab mets) λntab λmets λval0
+  ((Finalize val1 ntab mets) λntab λmets λval1
+  λt (t ntab mets (O32 oper val0 val1))))
 (Finalize (Ask name) ntab mets) =
   λt (t ntab mets (Ask name))
 (Finalize (Ann xval xtyp) ntab mets) =
@@ -695,6 +755,9 @@ NameTable.Empty = (NameTable Empty Array.Empty)
 (Finalize.Def nm val (Var name))                = (U32.If (Name.Equal name nm) val (Var name))
 (Finalize.Def nm val (Met hash))                = (Met hash)
 (Finalize.Def nm val Typ)                       = Typ
+(Finalize.Def nm val U32)                       = U32
+(Finalize.Def nm val (N32 numb))                = (N32 numb)
+(Finalize.Def nm val (O32 oper val0 val1))      = (O32 oper (Finalize.Def nm val val0) (Finalize.Def nm val val1))
 (Finalize.Def nm val (Ask name))                = (Ask name)
 (Finalize.Def nm val (Ann xval xtyp))           = (Ann (Finalize.Def nm val xval) (Finalize.Def nm val xtyp))
 (Finalize.Def nm val (Let name expr body))      = (Let name (Finalize.Def nm val expr) (Finalize.Def.Body nm val name body))
@@ -805,8 +868,9 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   // TODO: use different constructor names
   // FIXME: is this really needed? benchmark without
   // (File.Make.LHS Term Term) : Term
-  (File.Make.LHS (Var name)             rhs) = (Use name (Uses name rhs))
-  (File.Make.LHS (Cts ctid args)        rhs) = (Cts ctid (File.Make.LHS.Many args rhs))
+  (File.Make.LHS (Var name)      rhs) = (Use name (Uses name rhs))
+  (File.Make.LHS (Cts ctid args) rhs) = (Cts ctid (File.Make.LHS.Many args rhs))
+  (File.Make.LHS (N32 numb)      rhs) = (N32 numb)
 
   (File.Make.LHS.Many Nil         rhs) = Nil
   (File.Make.LHS.Many (Cons x xs) rhs) = (Cons (File.Make.LHS x rhs) (File.Make.LHS.Many xs rhs))
@@ -871,6 +935,21 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Term.Show.Go Typ file) =
     λx((String.Show.Go "Type")
       x)
+  (Term.Show.Go U32 file) =
+    λx((String.Show.Go "U32")
+      x)
+  (Term.Show.Go (N32 numb) file) =
+    λx((String.Show.Go (U32.Show numb))
+      x)
+  (Term.Show.Go (O32 oper val0 val1) file) =
+    λx((String.Show.Go "(")
+      ((Oper.Show.Go oper)
+      ((String.Show.Go " ")
+      ((Term.Show.Go val0 file)
+      ((String.Show.Go " ")
+      ((Term.Show.Go val1 file)
+      ((String.Show.Go ")")
+      x)))))))
   (Term.Show.Go (Ask name) file) =
     λx((String.Show.Go "?")
       ((String.Show.Go name)
@@ -934,6 +1013,22 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       x)))
   (String.Show.Go xs) =
     λx(String.Concat xs x)
+  (Oper.Show.Go ADD) = (String.Show.Go "+")
+  (Oper.Show.Go SUB) = (String.Show.Go "-")
+  (Oper.Show.Go MUL) = (String.Show.Go "*")
+  (Oper.Show.Go DIV) = (String.Show.Go "/")
+  (Oper.Show.Go MOD) = (String.Show.Go "%")
+  (Oper.Show.Go AND) = (String.Show.Go "&")
+  (Oper.Show.Go OR)  = (String.Show.Go "|")
+  (Oper.Show.Go XOR) = (String.Show.Go "^")
+  (Oper.Show.Go SHL) = (String.Show.Go "<<")
+  (Oper.Show.Go SHR) = (String.Show.Go ">>")
+  (Oper.Show.Go LTN) = (String.Show.Go "<")
+  (Oper.Show.Go LTE) = (String.Show.Go "<=")
+  (Oper.Show.Go EQL) = (String.Show.Go "==")
+  (Oper.Show.Go GTE) = (String.Show.Go ">=")
+  (Oper.Show.Go GTN) = (String.Show.Go ">")
+  (Oper.Show.Go NEQ) = (String.Show.Go "!=")
 
 (Context.Show Nil file) = ""
 (Context.Show ctx file) =
@@ -983,7 +1078,10 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     let next = (StrCons (+ 48 (% n 10)) str)
     ((U32.If (< n 10) λx(x) λx(U32.ShowBuild (/ n 10) x)) next)
 
-
+// (U32.Read String) : U32
+(U32.Read str) = (U32.Read.Go str 0)
+  (U32.Read.Go StrNil         r) = r
+  (U32.Read.Go (StrCons x xs) r) = (U32.If (& (<= '0' x) (<= x '9')) (U32.Read.Go xs (+ (* r 10) (- x '0'))) 0)
 
 // Evaluation
 // ----------
@@ -994,6 +1092,9 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Uses nm (Use name numb))           = (Name.Equal name nm)
 (Uses nm (Met hash))                = 0
 (Uses nm Typ)                       = 0
+(Uses nm U32)                       = 0
+(Uses nm (N32 numb))                = 0
+(Uses nm (O32 oper val0 val1))      = (+ (Uses nm val0) (Uses nm val1))
 (Uses nm (Ask name))                = 0
 (Uses nm (Ann xval xtyp))           = (Uses nm xval)
 (Uses nm (Let name expr body))      = (+ (Uses nm expr) (Uses.Shadow (Name.Equal nm name) nm body))
@@ -1041,6 +1142,17 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   (High.Go Typ file vars) =
     (Trip file vars HTyp)
+
+  (High.Go U32 file vars) =
+    (Trip file vars HU32)
+
+  (High.Go (N32 numb) file vars) =
+    (Trip file vars (HN32 numb))
+
+  (High.Go (O32 oper val0 val1) file vars) =
+    (Trip.Get (High.Go val0 file vars) λfile λvars λval0
+    (Trip.Get (High.Go val1 file vars) λfile λvars λval1
+    (Trip file vars (HOperate oper val0 val1))))
 
   (High.Go (Ask name) file vars) =
     (Trip file vars (HAsk name))
@@ -1111,8 +1223,6 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (HFindMatchingRule.Found (Trip lhs term 0) rhs rules file vars) = (HFindMatchingRule rules term file vars)
   (HFindMatchingRule.Found (Trip lhs term 1) rhs rules file vars) = (High.Go rhs file ((HMatch.Go lhs term) vars))
 
-
-
 // High-Order pattern-matching
 
 // Tests if a LHS matches with a HTerm.
@@ -1122,6 +1232,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   (HMatches.Chain a b 0 fn cont) = (cont a b 0)
   (HMatches.Chain a b 1 fn cont) = (Trip.Get (fn a b) cont)
+
+  (HMatches.Go (N32 x.numb) (HN32 y.numb)) = (Trip (N32 x.numb) (HN32 y.numb) (== x.numb y.numb))
 
   (HMatches.Go (Cts x.ctid x.args) (HCts y.ctid y.args)) = (HMatches.Go.Cts (== x.ctid y.ctid) x.ctid x.args y.ctid y.args)
     (HMatches.Go.Cts 0 x.ctid x.args y.ctid y.args) = (Trip (Cts x.ctid x.args) (HCts y.ctid y.args) 0)
@@ -1150,6 +1262,25 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (HMatch.Go a b) = λz
     z
 
+// High-order operation
+(HOperate ADD (HN32 val0) (HN32 val1)) = (HN32 (+  val0 val1))
+(HOperate SUB (HN32 val0) (HN32 val1)) = (HN32 (-  val0 val1))
+(HOperate MUL (HN32 val0) (HN32 val1)) = (HN32 (*  val0 val1))
+(HOperate DIV (HN32 val0) (HN32 val1)) = (HN32 (/  val0 val1))
+(HOperate MOD (HN32 val0) (HN32 val1)) = (HN32 (%  val0 val1))
+(HOperate AND (HN32 val0) (HN32 val1)) = (HN32 (&  val0 val1))
+(HOperate OR  (HN32 val0) (HN32 val1)) = (HN32 (|  val0 val1))
+(HOperate XOR (HN32 val0) (HN32 val1)) = (HN32 (^  val0 val1))
+(HOperate SHL (HN32 val0) (HN32 val1)) = (HN32 (<< val0 val1))
+(HOperate SHR (HN32 val0) (HN32 val1)) = (HN32 (>> val0 val1))
+(HOperate LTN (HN32 val0) (HN32 val1)) = (HN32 (<  val0 val1))
+(HOperate LTE (HN32 val0) (HN32 val1)) = (HN32 (<= val0 val1))
+(HOperate EQL (HN32 val0) (HN32 val1)) = (HN32 (== val0 val1))
+(HOperate GTE (HN32 val0) (HN32 val1)) = (HN32 (>= val0 val1))
+(HOperate GTN (HN32 val0) (HN32 val1)) = (HN32 (>  val0 val1))
+(HOperate NEQ (HN32 val0) (HN32 val1)) = (HN32 (!= val0 val1))
+(HOperate oper val0       val1)        = (HO32 oper val0 val1)
+
 // High-order application
 (HApply (HLam fbody) argm) = (fbody argm)
 (HApply func         argm) = (HApp func argm)
@@ -1171,6 +1302,17 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   (Low.Go HTyp depth) =
     Typ
+
+  (Low.Go HU32 depth) =
+    U32
+
+  (Low.Go (HN32 numb) depth) =
+    (N32 numb)
+
+  (Low.Go (HO32 oper val0 val1) depth) =
+    let val0 = (Low.Go val0 depth)
+    let val1 = (Low.Go val1 depth)
+    (O32 oper val0 val1)
 
   (Low.Go (HAsk name) depth) =
     (Ask name)
@@ -1265,6 +1407,17 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   (Infer.Go file Typ ctx eqs ars) =
     (Checked eqs ars HTyp)
+
+  (Infer.Go file U32 ctx eqs ars) =
+    (Checked eqs ars HTyp)
+
+  (Infer.Go file (N32 numb) ctx eqs ars) =
+    (Checked eqs ars HU32)
+
+  (Infer.Go file (O32 oper val0 val1) ctx eqs ars) =
+    (Chain (Check.Go file val0 HU32 ctx eqs ars) λeqs λars λok
+    (Chain (Check.Go file val1 HU32 ctx eqs ars) λeqs λars λok
+    (Checked eqs ars HU32)))
 
   (Infer.Go file (Ask name) ctx eqs ars) =
     (Checked eqs ars (HAsk name))
@@ -1425,7 +1578,18 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Equal file k HTyp HTyp depth subst ext) =
   (Trip subst ext 1)
 
-(Equal file k (HAsk name) (HAsk name) depth subst ext) =
+(Equal file k HU32 HU32 depth subst ext) =
+  (Trip subst ext 1)
+
+(Equal file k (HN32 a_numb) (HN32 b_numb) depth subst ext) =
+  (Trip subst ext (== a_numb b_numb))
+
+(Equal file k (HO32 a_oper a_val0 a_val1) (HO32 b_oper b_val0 b_val1) depth subst ext) =
+  (Trip.Get (Equal file k a_val0 b_val0 depth subst ext) λsubst λext λval0_eq
+  (Trip.Get (Equal file k a_val1 b_val1 depth subst ext) λsubst λext λval1_eq
+  (Trip subst ext (& (== a_oper b_oper) (& val0_eq val1_eq)))))
+
+(Equal file k (HAsk a_name) (HAsk b_name) depth subst ext) =
   (Trip subst ext 1)
 
 (Equal file k (HAll a_type a_body) (HAll b_type b_body) depth subst ext) =
@@ -1498,6 +1662,9 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Holes.Subst subst (HLev name numb))           = (HLev name numb)
 (Holes.Subst subst (HUse name numb))           = (HUse name numb)
 (Holes.Subst subst HTyp)                       = HTyp
+(Holes.Subst subst HU32)                       = HU32
+(Holes.Subst subst (HN32 numb))                = (HN32 numb)
+(Holes.Subst subst (HO32 oper val0 val1))      = (HO32 oper (Holes.Subst subst val0) (Holes.Subst subst val1))
 (Holes.Subst subst (HAsk name))                = (HAsk name)
 (Holes.Subst subst (HAnn xval xtyp))           = (HAnn (Holes.Subst subst xval) (Holes.Subst subst xtyp))
 (Holes.Subst subst (HLet expr body))           = (HLet (Holes.Subst subst expr) λx(Holes.Subst subst (body x)))
@@ -1517,6 +1684,9 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Holes.Count (Lev name numb))           = 0
 (Holes.Count (Use name numb))           = 0
 (Holes.Count Typ)                       = 0
+(Holes.Count U32)                       = 0
+(Holes.Count (N32 numb))                = 0
+(Holes.Count (O32 oper val0 val1))      = (+ (Holes.Count val0) (Holes.Count val1))
 (Holes.Count (Ask name))                = 0
 (Holes.Count (Ann xval xtyp))           = (+ (Holes.Count xval) (Holes.Count xtyp))
 (Holes.Count (Let name expr body))      = (+ (Holes.Count expr) (Holes.Count body))
@@ -1604,6 +1774,15 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Verify.Rule.List.Sub bod (Cons (Pair name type) vals)) =
     (CloneFor bod name type (Verify.Rule.List.Sub bod vals))
 
+
+
+// Compiler
+// ========
+
+(Compile.to_khvm (Lam name body)) =
+  λx((String.Show.Go (Name.GetString name))
+    ((Compile.to_khvm body)
+    x))
 
 
 // #############################################################################
@@ -1717,15 +1896,20 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   Foo : Nat
     Foo = (Nat.Destroy (Nat.Pow2
-      (Succ (Succ (Succ
-      (Succ (Succ (Succ (Succ
-      (Succ (Succ (Succ (Succ
-      (Succ (Succ (Succ (Succ
-        Zero
-      )))))))))))))))))
+      (Succ (Succ (Succ (Succ (Succ (Succ (Succ
+      (Succ (Succ (Succ (Succ (Succ (Succ (Succ
+      Zero))))))))))))))))
 
-  Main : {Foo == Zero}
-    Main = refl Zero
+  //Main : {Foo == Zero}
+    //Main = refl Zero
+
+  (Bar n:U32) : U32
+    (Bar 0) = 0
+    (Bar 1) = 10
+    (Bar x) = 20
+
+  Main : U32
+    Main = (* (+ (Bar 1) 1) 2)
 "
 
 (Kind2.Check code) = (Kind2.Check.Go (File.Read code))
@@ -1737,5 +1921,6 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Kind2.Run.Go (Er err)  expr) = err
   (Kind2.Run.Go (Ok file) expr) = (Term.Show file (Normal file (Term.Read file expr)))
 
-(Main n) = (Kind2.Check Test.Equal)
-//(Main n) = (Kind2.Run Test.Equal)
+//(Main n) = (Kind2.Check Test.Equal)
+(Main n) = (Kind2.Run Test.Equal)
+//(Main n) = (U32.Read "123456")

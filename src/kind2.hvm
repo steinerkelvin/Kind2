@@ -1397,7 +1397,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   // TODO: linearize file? probably not needed
   (Infer.Go file (Var name) ctx eqs ars) = (Infer.Go.Find name ctx eqs ars)
-    (Infer.Go.Find name Nil eqs ars) = (Errored (String.Concat "Unbound: " (Name.GetString name)))
+    (Infer.Go.Find name Nil eqs ars) = (Errored (String.Flatten ["Unbound: " (Name.GetString name) "\n"]))
     (Infer.Go.Find name (Cons (Pair var typ) ctx) eqs ars) = (Infer.Go.Found (Name.Equal name var) name typ ctx eqs ars)
       (Infer.Go.Found 1 name typ ctx eqs ars) = (Checked eqs ars typ)
       (Infer.Go.Found 0 name typ ctx eqs ars) = (Infer.Go.Find name ctx eqs ars)
@@ -1569,7 +1569,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Equal file 0 (HVar a_name) (HVar b_name) depth subst ext) =
   (Trip subst ext (Name.Equal a_name b_name))
 
-(Equal file 0 (HVar a_name) b depth subst ext) =
+(Equal file 1 (HVar a_name) b depth subst ext) =
   (Capt file (HVar a_name) b subst ext)
 
 (Equal file 1 a (HVar b_name) depth subst ext) =
@@ -1791,7 +1791,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
 
 
-(Test.Equal) = "
+(Test.0) = "
   // Booleans
   Bool : Type
     True  : Bool
@@ -1854,8 +1854,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     e1
 
   // Congruence of equality
-  (Cong t:Type a:t b:u f:∀(x:t)u e:{a == b}) : {(f a) == (f b)}
-    (Cong t a b f e) =
+  (Cong t:Type u:Type a:t b:t f:∀(x:t)u e:{a == b}) : {(f a) == (f b)}
+    (Cong t u a b f e) =
       rewrite x with e in {(f x) == (f b)}
       refl (f b)
 
@@ -1890,8 +1890,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Nat.BFT (Succ Zero))     = refl (Succ Zero)
     (Nat.BFT (Succ (Succ n))) =
       let e0 = (Nat.BFT n)
-      let e1 = (Cong _ _ _ λx(Succ x) e0)
-      let e2 = (Cong _ _ _ λx(Succ x) e1)
+      let e1 = (Cong _ _ _ _ λx(Succ x) e0)
+      let e2 = (Cong _ _ _ _ λx(Succ x) e1)
       e2
 
   Foo : Nat
@@ -1917,10 +1917,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Kind2.Check.Go (Ok file)) = (Verify.File file)
 
 (Kind2.Run code) = (Kind2.Run.Go (File.Read code) "Main")
-//(Kind2.Run code) = (Kind2.Run.Go (File.Read code) "[Main1]")
   (Kind2.Run.Go (Er err)  expr) = err
   (Kind2.Run.Go (Ok file) expr) = (Term.Show file (Normal file (Term.Read file expr)))
 
-//(Main n) = (Kind2.Check Test.Equal)
-(Main n) = (Kind2.Run Test.Equal)
-//(Main n) = (U32.Read "123456")
+(Main n) = (Kind2.Check Test.0)
+//(Main n) = (Kind2.Run Test.0)

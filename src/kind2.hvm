@@ -48,7 +48,7 @@
 
 
 // Trip
-// ======
+// ====
 
 // (Trip.Get (Trip a b c) (∀a ∀b λc d)) : d
 (Trip.Get (Trip x y z) fn) = (fn x y z)

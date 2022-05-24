@@ -1,0 +1,134 @@
+// Kind2 implemented in Kind2
+// ==========================
+
+// U32
+// ===
+
+(U32.if a:Type cond:U32 if_t:a if_f:a): a
+  (U32.if a 0 t f) = f
+  (U32.if a 1 t f) = t
+
+(U32.and a:U32 b:U32): U32
+  (U32.and 0 b) = 0
+  (U32.and 1 b) = b
+
+(U32.not a:U32): U32
+  (U32.not 0) = 1
+  (U32.not 1) = 0
+
+// Bool
+// ====
+
+Bool: Type
+  Bool.true  : Bool
+  Bool.false : Bool
+
+(Bool.if a:Type Bool if_t:a if_f:a): a
+  (Bool.if a Bool.false t f) = f
+  (Bool.if a Bool.true  t f) = f
+
+// Pair
+// ====
+
+(Pair a:Type b:Type): Type
+  (Pair.new a:Type b:Type fst:a snd:b): (Pair a b)
+
+(Pair.get a:Type b:Type c:Type p:(Pair a b) f:∀(x:a)∀(y:b)c): c
+  (Pair.get a b c (Pair.new a b x y) f) = (f x y)
+
+(Pair.fst a:Type b:Type p:(Pair a b)): a
+  (Pair.fst a b (Pair.new a b x y)) = x
+
+(Pair.snd a:Type b:Type p:(Pair a b)): b
+  (Pair.snd a b (Pair.new a b x y)) = y
+
+(Pair.fst.mut a:Type b:Type p:(Pair a b) f:∀(x:a)a): (Pair a b)
+  (Pair.fst.mut a b (Pair.new a b x y) f) = (Pair.new a b (f x) y)
+
+(Pair.snd.mut a:Type b:Type p:(Pair a b) f:∀(x:b)b): (Pair a b)
+  (Pair.snd.mut a b (Pair.new a b x y) f) = (Pair.new a b x (f y))
+
+// Triple
+// ======
+
+(Triple a:Type b:Type c:Type): Type
+  (Triple.new a:Type b:Type c:Type fst:a snd:b trd:c): (Triple a b c)
+
+(Triple.get a:Type b:Type c:Type d:Type t:(Triple a b c) f:∀(x:a)∀(y:b)∀(z:c)d): d
+  (Triple.get a b c d (Triple.new a b c x y z) f) = (f x y z)
+
+// Maybe
+// =====
+
+(Maybe a:Type): Type
+  (Maybe.none a:Type)     : (Maybe a)
+  (Maybe.some a:Type x:a) : (Maybe a)
+
+(Maybe.case a:Type r:Type m:(Maybe a) none:r some:∀(x:a)r): r
+  (Maybe.case a r (Maybe.some a x) case_none case_some) = (case_some x)
+  (Maybe.case a r (Maybe.none a)   case_none case_some) = case_none
+
+// List
+// ====
+
+(List a:Type): Type
+  (List.nil a:Type)                       : (List a)
+  (List.cons a:Type head:a tail:(List a)) : (List a)
+
+(List.map a:Type b:Type l:(List a) f:∀(x:a)b): (List b)
+  (List.map a b (List.nil a) f)            = (List.nil b)
+  (List.map a b (List.cons a head tail) f) = (List.cons b (f head) (List.map a b tail f))
+
+(List.reverse a:Type l:(List a)): (List a)
+  (List.reverse a l) = (List.reverse.go a l (List.nil a))
+
+(List.reverse.go a:Type l:(List a) r:(List a)): (List a)
+  (List.reverse.go a (List.nil a)            r) = r
+  (List.reverse.go a (List.cons a head tail) r) = (List.reverse.go a tail (List.cons a head r))
+
+(List.length a:Type l:(List a)): U32
+  (List.length a (List.nil a))            = 0
+  (List.length a (List.cons a head tail)) = (+ 1 (List.length a tail))
+
+(List.is_empty a:Type l:(List a)): U32
+  (List.is_empty a (List.nil a))            = 1
+  (List.is_empty a (List.cons a head tail)) = 0
+
+(List.concat a:Type xs:(List a) ys:(List a)): (List a)
+  (List.concat a (List.nil a)       ys) = ys
+  (List.concat a (List.cons a x xs) ys) = (List.cons a x (List.concat a xs ys))
+
+(List.fold a:Type r:Type xs:(List a) nil:r cons:∀(x:a)∀(xs:r)r): r
+  (List.fold a r (List.nil a)       nil cons) = nil
+  (List.fold a r (List.cons a x xs) nil cons) = (cons x (List.fold a r xs nil cons))
+
+// String
+// ======
+
+Char : Type
+  Char = U32
+
+String : Type
+  StrNil                          : String
+  (StrCons head:Char tail:String) : String 
+
+// Returns true if a string is empty
+(String.is_empty s:String): Bool
+  (String.is_empty StrNil)         = Bool.true
+  (String.is_empty (StrCons x xs)) = Bool.false
+
+// Concatenates two strings
+(String.concat a:String b:String) : String
+  (String.concat StrNil         ys) = ys
+  (String.concat (StrCons x xs) ys) = (StrCons x (String.concat xs ys))
+
+// Concatenates a list of strings
+(String.flatten a:(List String)) : String
+  (String.flatten (List.nil a))            = StrNil
+  (String.flatten (List.cons String x xs)) = (String.concat x (String.flatten xs))
+
+// Returns true if two strings are equal
+(String.equal xs:String ys:String) : U32
+  (String.equal StrNil         StrNil)         = 1
+  (String.equal (StrCons x xs) (StrCons y ys)) = (& (== x y) (String.equal xs ys))
+  (String.equal xs             ys)             = 0

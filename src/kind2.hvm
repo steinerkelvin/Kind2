@@ -818,6 +818,7 @@ NameTable.Empty = (NameTable Empty Array.Empty)
 //   funs: Array Func
 // }
 
+// FIXME: this should be replaced by proper user of Maybe
 // FuncEmpty : Func
 FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
@@ -1477,13 +1478,13 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     // 1. Find Cts's type on file
     (Infer.Go.Cts.FindFunc file ctid term ctx eqs ars) =
       (Pair.Get (File.GotFunc file ctid) λfile λfunc
-      (Maybe.Case func (Errored "Type not found.") λfunc // shouldn't be reachable, since it defaults
+      (Maybe.Case func (Errored (String.Concat "Type not found for: " (Term.Show file term))) λfunc // FIXME: File.GotFunc should store Maybes
       (Func.Get func λlty λrty λrul
       (Infer.Go.Cts.MakeList file ctid lty rty term ctx eqs ars))))
 
     // 2. Convert types and args to lists (FIXME: not necessary anymore, remove)
-    (Infer.Go.Cts.MakeList file ctid (Cts t.id t.args) rt (Cts id args) ctx eqs ars) =
-      (Infer.Go.Cts.CheckList file t.args args rt [] ctx eqs ars)
+    (Infer.Go.Cts.MakeList file ctid (Cts t.id t.args) rt (Cts id args) ctx eqs ars) = (Infer.Go.Cts.CheckList file t.args args rt [] ctx eqs ars)
+    (Infer.Go.Cts.MakeList file ctid lt                rt term          ctx eqs ars) = (Errored (String.Concat "Type not found for: " (Term.Show file term))) // FIXME: File.GotFunc should store Maybes
 
     // 3. Recursively checks the lists
     (Infer.Go.Cts.CheckList file Nil Nil rtyp sub ctx eqs ars) =

@@ -132,3 +132,20 @@ String : Type
   (String.equal StrNil         StrNil)         = 1
   (String.equal (StrCons x xs) (StrCons y ys)) = (& (== x y) (String.equal xs ys))
   (String.equal xs             ys)             = 0
+
+(String.hash xs:String) : U32
+  (String.hash str) = (String.hash.go str 0)
+
+(String.hash.go xs:String hash:U32) : U32
+  (String.hash.go StrNil         hash) = hash
+  (String.hash.go (StrCons x xs) hash) = (String.hash.go xs (+ (- (<< hash 5) hash) x))
+
+(String.map xs:String f:∀(x:Char)Char) : String
+  (String.map StrNil         f) = StrNil
+  (String.map (StrCons x xs) f) = (StrCons (f x) (String.map xs f))
+
+(String.join xs:(List String) sep:String) : String
+  (String.join (List.nil String)                sep) = StrNil
+  (String.join (List.cons String x (List.nil String))  sep) = x
+  (String.join (List.cons String x xs)                 sep) =
+    (String.flatten (List.cons String x (List.cons String (String.join xs sep) (List.nil String))))

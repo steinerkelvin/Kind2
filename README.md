@@ -21,7 +21,7 @@ cargo install kind2
 
 ### 2. Create a Kind2 file
 
-Kind2 files look like [HVM](https://github.com/kind2/). Save the file below as `main.hvm`:
+Kind2 files look like [HVM](https://github.com/Kindelia/HVM/). Save the file below as `main.hvm`:
 
 ```javascript
 // Booleans
@@ -40,7 +40,6 @@ Bool : Type
   (Bool.DNT False) = refl False
 ```
 
-
 ### 3. Type-check it
 
 ```sh
@@ -49,6 +48,6 @@ kind2 check main.kind2
 
 ### 4. Compile it to HVM
 
-```
-... TODO ...
+```console
+...TODO...
 ```

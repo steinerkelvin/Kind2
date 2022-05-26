@@ -238,3 +238,22 @@ String : Type
     (Map.nodes a (Map.mut.go a n lft key f) rgt)
   (Map.mut.go.nodes a 1 n key lft rgt f) =
     (Map.nodes a lft (Map.mut.go a n rgt key f))
+
+(Map.to_list a:Type val:(Map a)) : (List (Pair U32 a))
+  (Map.to_list a val) = ((Map.to_list.go a val 0) (List.nil (Pair U32 a)))
+
+(Map.to_list.go a:Type val:(Map a) key:U32) : ∀(x:(List (Pair U32 a)))(List (Pair U32 a))
+  (Map.to_list.go a (Map.empty a)     key) = λx x
+  (Map.to_list.go a (Map.entry a val) key) = λx
+    (List.cons (Pair U32 a) (Pair.new U32 a key val) x)
+  (Map.to_list.go a (Map.nodes a lft rgt) key) = λx
+    ((Map.to_list.go a lft (* key 2)) ((Map.to_list.go a rgt (+ (* key 2) 1)) x))
+
+// Crashed!
+// (List.to_map a:Type list:(List (Pair U32 a))) : (Map a)
+//   (List.to_map a list) = (List.to_map.go a list (Map.empty a))
+// 
+// (List.to_map.go a:Type list:(List (Pair U32 a)) map:(Map a)) : (Map a)
+//   (List.to_map.go a (List.nil (Pair U32 a)) map) = map
+//   (List.to_map.go a (List.cons (Pair U32 a) (Pair.new U32 a key val) xs) map) =
+//     (List.to_map.go xs (Map.set a map key val))

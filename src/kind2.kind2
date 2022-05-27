@@ -231,3 +231,109 @@ String : Type
 (Braun.to_list t:Type tree:(Braun t)) : ∀(x:(List t)) (List t)
   (Braun.to_list t (Braun.tie t l x r)) = λz((Braun.to_list t l) (List.cons t x ((Braun.to_list t r) z)))
   (Braun.to_list t (Braun.tip t))       = λz(z)
+
+// Map
+// ===
+
+(Map a:Type) : Type
+  (Map.empty a:Type)                         : (Map a)
+  (Map.entry a:Type value:a)                 : (Map a)
+  (Map.nodes a:Type lft:(Map a) rgt:(Map a)) : (Map a)
+
+(Map.length a:Type tree:(Map a)) : U32
+  (Map.length a (Map.empty a        )) = 0
+  (Map.length a (Map.entry a     val)) = 1
+  (Map.length a (Map.nodes a lft rgt)) = (+ (Map.length a lft) (Map.length a rgt))
+
+(Map.get a:Type tree:(Map a) key:U32) : (Pair (Map a) (Maybe a))
+(Map.get a tree key) = (Map.get.go a 32 tree key (λx x))
+
+(Map.get.go a:Type n:U32 tree:(Map a) key:U32 self:∀(x:(Map a))(Map a)) : (Pair (Map a) (Maybe a))
+  (Map.get.go a n (Map.empty a) key self) =
+    (Pair.new (Map a) (Maybe a) (self (Map.empty a)) (Maybe.none a))
+  (Map.get.go a n (Map.entry a val) key self) =
+    (Pair.new (Map a) (Maybe a) (self (Map.entry a val)) (Maybe.some a val))
+  (Map.get.go a n (Map.nodes a lft rgt) key self) =
+    (Map.get.go.nodes a (& (>> key (- n 1)) 1) (- n 1) key lft rgt self)
+
+(Map.get.go.nodes a:Type i:U32 n:U32 key:U32 lft:(Map a) rgt:(Map a) self:∀(x:(Map a))(Map a)) : (Pair (Map a) (Maybe a))
+  (Map.get.go.nodes a 0 n key lft rgt self) =
+    (Map.get.go a n lft key λx(self (Map.nodes a x rgt)))
+  (Map.get.go.nodes a 1 n key lft rgt self) =
+    (Map.get.go a n rgt key λx(self (Map.nodes a lft x)))
+
+(Map.delete a:Type tree:(Map a) key:U32) : (Map a)
+(Map.delete a tree key) = (Map.delete.go a 32 tree key)
+
+(Map.delete.go a:Type n:U32 tree:(Map a) key:U32) : (Map a)
+  (Map.delete.go a n (Map.nodes a lft rgt) key) =
+    (Map.delete.go.nodes a (& (>> key (- n 1)) 1) (- n 1) lft rgt key)
+  (Map.delete.go a n tree key) = (Map.empty a)
+
+(Map.delete.go.nodes a:Type i:U32 n:U32 lft:(Map a) rgt:(Map a) key:U32) : (Map a)
+  (Map.delete.go.nodes a 0 n lft rgt key) =
+    (Map.nodes a (Map.delete.go a n lft key) rgt)
+  (Map.delete.go.nodes a 1 n lft rgt key) =
+    (Map.nodes a lft (Map.delete.go a n rgt key))
+
+(Map.set a:Type tree:(Map a) key:U32 val:a) : (Map a)
+(Map.set a tree key val) = (Map.set.go a 32 tree key val)
+
+(Map.set.go a:Type n:U32 tree:(Map a) key:U32 val:a) : (Map a)
+  (Map.set.go a 0 tree          key val) = (Map.entry a val)
+  (Map.set.go a n (Map.empty a) key val) =
+    (Map.set.go.empty a (& (>> key (- n 1)) 1) (- n 1) key val)
+  (Map.set.go a n (Map.nodes a lft rgt) key val) =
+    (Map.empty a)
+
+(Map.set.go.empty a:Type i:U32 n:U32 key:U32 val:a) : (Map a)
+  (Map.set.go.empty a 0 n key val) =
+    (Map.nodes a (Map.set.go a n (Map.empty a) key val) (Map.empty a))
+  (Map.set.go.empty a 1 n key val) =
+    (Map.nodes a (Map.empty a) (Map.set.go a n (Map.empty a) key val))
+
+(Map.set.go.nodes a:Type i:U32 n:U32 key:U32 lft:(Map a) rgt:(Map a) val:a) : (Map a)
+  (Map.set.go.nodes a 0 n key lft rgt val) =
+    (Map.nodes a (Map.set.go a n lft key val) rgt)
+  (Map.set.go.nodes a 1 n key lft rgt val) =
+    (Map.nodes a lft (Map.set.go a n rgt key val))
+
+(Map.mut a:Type tree:(Map a) key:U32 f:∀(v:a)a) : (Map a)
+(Map.mut a tree key f) = (Map.mut.go a 32 tree key f)
+
+(Map.mut.go a:Type n:U32 tree:(Map a) key:U32 f:∀(v:a)a) : (Map a)
+  (Map.mut.go a 0 (Map.entry a x) key f) = (Map.entry a (f x))
+  (Map.mut.go a 0 tree            key f) = tree
+  (Map.mut.go a n (Map.empty a)   key f) =
+    (Map.mut.go.empty a (& (>> key (- n 1)) 1) (- n 1) key f)
+  (Map.mut.go a n (Map.nodes a lft rgt) key f) =
+    (Map.mut.go.nodes a (& (>> key (- n 1)) 1) (- n 1) key lft rgt f)
+
+(Map.mut.go.empty a:Type i:U32 n:U32 key:U32 f:∀(v:a)a) : (Map a)
+  (Map.mut.go.empty a 0 n key f) =
+    (Map.nodes a (Map.mut.go a n (Map.empty a) key f) (Map.empty a))
+  (Map.mut.go.empty a 1 n key f) =
+    (Map.nodes a (Map.empty a) (Map.mut.go a n (Map.empty a) key f))
+
+(Map.mut.go.nodes a:Type i:U32 n:U32 key:U32 lft:(Map a) rgt:(Map a) f:∀(v:a)a) : (Map a)
+  (Map.mut.go.nodes a 0 n key lft rgt f) =
+    (Map.nodes a (Map.mut.go a n lft key f) rgt)
+  (Map.mut.go.nodes a 1 n key lft rgt f) =
+    (Map.nodes a lft (Map.mut.go a n rgt key f))
+
+(Map.to_list a:Type val:(Map a)) : (List (Pair U32 a))
+  (Map.to_list a val) = ((Map.to_list.go a val 0) (List.nil (Pair U32 a)))
+
+(Map.to_list.go a:Type val:(Map a) key:U32) : ∀(x:(List (Pair U32 a)))(List (Pair U32 a))
+  (Map.to_list.go a (Map.empty a)     key) = λx x
+  (Map.to_list.go a (Map.entry a val) key) = λx
+    (List.cons (Pair U32 a) (Pair.new U32 a key val) x)
+  (Map.to_list.go a (Map.nodes a lft rgt) key) = λx
+    ((Map.to_list.go a lft (* key 2)) ((Map.to_list.go a rgt (+ (* key 2) 1)) x))
+
+(List.to_map a:Type list:(List (Pair U32 a))) : (Map a)
+  (List.to_map a list) = (List.to_map.go a list (Map.empty a))
+
+(List.to_map.go a:Type list:(List (Pair U32 a)) map:(Map a)) : (Map a)
+  (List.to_map.go a (List.nil (Pair U32 a))                              map) = map
+  (List.to_map.go a (List.cons (Pair U32 a) (Pair.new U32 a key val) xs) map) = (List.to_map.go a xs (Map.set a map key val))

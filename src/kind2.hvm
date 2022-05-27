@@ -1,7 +1,10 @@
 // FIXME: File is used non-linearly many time, fixing might optimize many functions
 // FIXME: syntax error on `TF : (Not (T == F))`
 // FIXME: variables with same names are considered equal; add an unique id?
-// Rewrites: 32177923 for `{(Nat.Destroy (Nat.Pow2 16)) == Zero}`
+// Rewrites for {(Nat.Destroy (Nat.Pow2 N)) == Zero}:
+// -  8404381 for N = 14
+// - 16338023 for N = 15
+// - 32177923 for N = 16
 
 // #############################################################################
 // # Prelude                                                                   #
@@ -467,10 +470,10 @@ ParseEnd = λcode (ParseEnd.Go code)
   (ParseVar.2 1 str) = (Bind ParseTerm λterm (Done (Some (Ann (Var (Name.Make str)) term))))
   (ParseVar.2 0 str) = (Done (Some (Var (Name.Make str))))
 
-// (ParseAsk) : (Parse (Maybe Term))
-(ParseAsk) = (Guard (MatchText "?")
+// (ParseHol) : (Parse (Maybe Term))
+(ParseHol) = (Guard (MatchText "?")
   (Bind ParseName λname
-  (Done (Ask name))))
+  (Done (Hol name))))
 
 // (ParseDef) : (Parser (Maybe Term))
 (ParseDef) = (Guard (MatchText "def ")
@@ -614,7 +617,7 @@ ParseEnd = λcode (ParseEnd.Go code)
     ParseAll,
     ParseLam,
     ParseApp,
-    ParseAsk,
+    ParseHol,
     ParseRfl,
     ParseRwt,
     ParseAnnEql,
@@ -692,8 +695,8 @@ NameTable.Empty = (NameTable Empty Array.Empty)
   ((Finalize val0 ntab mets) λntab λmets λval0
   ((Finalize val1 ntab mets) λntab λmets λval1
   λt (t ntab mets (O32 oper val0 val1))))
-(Finalize (Ask name) ntab mets) =
-  λt (t ntab mets (Ask name))
+(Finalize (Hol name) ntab mets) =
+  λt (t ntab mets (Hol name))
 (Finalize (Ann xval xtyp) ntab mets) =
   ((Finalize xval ntab mets) λntab λmets λxval
   ((Finalize xtyp ntab mets) λntab λmets λxtyp
@@ -758,7 +761,7 @@ NameTable.Empty = (NameTable Empty Array.Empty)
 (Finalize.Def nm val U32)                       = U32
 (Finalize.Def nm val (N32 numb))                = (N32 numb)
 (Finalize.Def nm val (O32 oper val0 val1))      = (O32 oper (Finalize.Def nm val val0) (Finalize.Def nm val val1))
-(Finalize.Def nm val (Ask name))                = (Ask name)
+(Finalize.Def nm val (Hol name))                = (Hol name)
 (Finalize.Def nm val (Ann xval xtyp))           = (Ann (Finalize.Def nm val xval) (Finalize.Def nm val xtyp))
 (Finalize.Def nm val (Let name expr body))      = (Let name (Finalize.Def nm val expr) (Finalize.Def.Body nm val name body))
 (Finalize.Def nm val (All name type body))      = (All name (Finalize.Def nm val type) (Finalize.Def.Body nm val name body))
@@ -870,8 +873,10 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   // FIXME: is this really needed? benchmark without
   // (File.Make.LHS Term Term) : Term
   (File.Make.LHS (Var name)      rhs) = (Use name (Uses name rhs))
-  (File.Make.LHS (Cts ctid args) rhs) = (Cts ctid (File.Make.LHS.Many args rhs))
   (File.Make.LHS (N32 numb)      rhs) = (N32 numb)
+  (File.Make.LHS (Cts ctid args) rhs) = (Cts ctid (File.Make.LHS.Many args rhs))
+  (File.Make.LHS (Rlf expr)      rhs) = (Rlf (File.Make.LHS expr rhs))
+  (File.Make.LHS term            rhs) = term
 
   (File.Make.LHS.Many Nil         rhs) = Nil
   (File.Make.LHS.Many (Cons x xs) rhs) = (Cons (File.Make.LHS x rhs) (File.Make.LHS.Many xs rhs))
@@ -951,7 +956,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       ((Term.Show.Go val1 file)
       ((String.Show.Go ")")
       x)))))))
-  (Term.Show.Go (Ask name) file) =
+  (Term.Show.Go (Hol name) file) =
     λx((String.Show.Go "?")
       ((String.Show.Go name)
       x))
@@ -1096,7 +1101,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Uses nm U32)                       = 0
 (Uses nm (N32 numb))                = 0
 (Uses nm (O32 oper val0 val1))      = (+ (Uses nm val0) (Uses nm val1))
-(Uses nm (Ask name))                = 0
+(Uses nm (Hol name))                = 0
 (Uses nm (Ann xval xtyp))           = (Uses nm xval)
 (Uses nm (Let name expr body))      = (+ (Uses nm expr) (Uses.Shadow (Name.Equal nm name) nm body))
 (Uses nm (All name type body))      = (+ (Uses nm type) (Uses.Shadow (Name.Equal nm name) nm body))
@@ -1155,8 +1160,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Trip.Get (High.Go val1 file vars) λfile λvars λval1
     (Trip file vars (HOperate oper val0 val1))))
 
-  (High.Go (Ask name) file vars) =
-    (Trip file vars (HAsk name))
+  (High.Go (Hol name) file vars) =
+    (Trip file vars (HHol name))
 
   (High.Go (All name type body) file vars) =
     (Trip.Get (High.Go type file vars) λfile λvars λtype
@@ -1315,8 +1320,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     let val1 = (Low.Go val1 depth)
     (O32 oper val0 val1)
 
-  (Low.Go (HAsk name) depth) =
-    (Ask name)
+  (Low.Go (HHol name) depth) =
+    (Hol name)
 
   (Low.Go (HAll type body) depth) =
     let name = (Name.Make (StrCons (+ 97 depth) StrNil))
@@ -1398,7 +1403,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   // TODO: linearize file? probably not needed
   (Infer.Go file (Var name) ctx eqs ars) = (Infer.Go.Find name ctx eqs ars)
-    (Infer.Go.Find name Nil eqs ars) = (Errored (String.Flatten ["Unbound: " (Name.GetString name) "\n"]))
+    (Infer.Go.Find name Nil eqs ars) = (Errored (String.Flatten ["Unbound: " (Name.GetString name)]))
     (Infer.Go.Find name (Cons (Pair var typ) ctx) eqs ars) = (Infer.Go.Found (Name.Equal name var) name typ ctx eqs ars)
       (Infer.Go.Found 1 name typ ctx eqs ars) = (Checked eqs ars typ)
       (Infer.Go.Found 0 name typ ctx eqs ars) = (Infer.Go.Find name ctx eqs ars)
@@ -1420,8 +1425,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Chain (Check.Go file val1 HU32 ctx eqs ars) λeqs λars λok
     (Checked eqs ars HU32)))
 
-  (Infer.Go file (Ask name) ctx eqs ars) =
-    (Checked eqs ars (HAsk name))
+  (Infer.Go file (Hol name) ctx eqs ars) =
+    (Checked eqs ars (HHol name))
 
   (Infer.Go file (Ann xval xtyp) ctx eqs ars) =
     let htyp = (High file xtyp Nil)
@@ -1590,7 +1595,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Trip.Get (Equal file k a_val1 b_val1 depth subst ext) λsubst λext λval1_eq
   (Trip subst ext (& (== a_oper b_oper) (& val0_eq val1_eq)))))
 
-(Equal file k (HAsk a_name) (HAsk b_name) depth subst ext) =
+(Equal file k (HHol a_name) (HHol b_name) depth subst ext) =
   (Trip subst ext 1)
 
 (Equal file k (HAll a_type a_body) (HAll b_type b_body) depth subst ext) =
@@ -1666,7 +1671,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Holes.Subst subst HU32)                       = HU32
 (Holes.Subst subst (HN32 numb))                = (HN32 numb)
 (Holes.Subst subst (HO32 oper val0 val1))      = (HO32 oper (Holes.Subst subst val0) (Holes.Subst subst val1))
-(Holes.Subst subst (HAsk name))                = (HAsk name)
+(Holes.Subst subst (HHol name))                = (HHol name)
 (Holes.Subst subst (HAnn xval xtyp))           = (HAnn (Holes.Subst subst xval) (Holes.Subst subst xtyp))
 (Holes.Subst subst (HLet expr body))           = (HLet (Holes.Subst subst expr) λx(Holes.Subst subst (body x)))
 (Holes.Subst subst (HAll type body))           = (HAll (Holes.Subst subst type) λx(Holes.Subst subst (body x)))
@@ -1688,7 +1693,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Holes.Count U32)                       = 0
 (Holes.Count (N32 numb))                = 0
 (Holes.Count (O32 oper val0 val1))      = (+ (Holes.Count val0) (Holes.Count val1))
-(Holes.Count (Ask name))                = 0
+(Holes.Count (Hol name))                = 0
 (Holes.Count (Ann xval xtyp))           = (+ (Holes.Count xval) (Holes.Count xtyp))
 (Holes.Count (Let name expr body))      = (+ (Holes.Count expr) (Holes.Count body))
 (Holes.Count (All name type body))      = (+ (Holes.Count type) (Holes.Count body))
@@ -1901,16 +1906,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       (Succ (Succ (Succ (Succ (Succ (Succ (Succ
       Zero))))))))))))))))
 
-  //Main : {Foo == Zero}
-    //Main = refl Zero
-
-  (Bar n:U32) : U32
-    (Bar 0) = 0
-    (Bar 1) = 10
-    (Bar x) = 20
-
-  Main : U32
-    Main = (* (+ (Bar 1) 1) 2)
+  Main : {Foo == Zero}
+    Main = refl Zero
 "
 
 (Kind2.Check code) = (Kind2.Check.Go (File.Read code))

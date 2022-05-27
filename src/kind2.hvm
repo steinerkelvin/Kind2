@@ -106,6 +106,7 @@
 (Name.GetHash (Name str hash)) = hash
 
 (Name.GetString (Name str hash)) = str
+(Name.GetString str) = (String.Concat "<FIXME>" str)
 
 (Name.Equal (Name a_str a_hash) (Name b_str b_hash)) = (== a_hash b_hash)
 
@@ -1600,11 +1601,11 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
 (Equal file k (HAll a_type a_body) (HAll b_type b_body) depth subst ext) =
   (Trip.Get (Equal file k a_type b_type depth subst ext) λsubst λext λtype_eq
-  (Trip.Get (Equal file k (a_body (HLev "" depth)) (b_body (HLev "" depth)) (+ depth 1) subst ext) λsubst λext λbody_eq
+  (Trip.Get (Equal file k (a_body (HLev (Name.Make "?") depth)) (b_body (HLev (Name.Make "?") depth)) (+ depth 1) subst ext) λsubst λext λbody_eq
   (Trip subst ext (& type_eq body_eq))))
 
 (Equal file k (HLam a_body) (HLam b_body) depth subst ext) =
-  (Trip.Get (Equal file k (a_body (HLev "" depth)) (b_body (HLev "" depth)) (+ depth 1) subst ext) λsubst λext λbody_eq
+  (Trip.Get (Equal file k (a_body (HLev (Name.Make "?") depth)) (b_body (HLev (Name.Make "?") depth)) (+ depth 1) subst ext) λsubst λext λbody_eq
   (Trip subst ext body_eq))
 
 (Equal file k (HApp a_func a_argm) (HApp b_func b_argm) depth subst ext) =

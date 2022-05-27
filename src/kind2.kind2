@@ -48,6 +48,7 @@ Bool: Type
 (Pair.snd.mut a:Type b:Type p:(Pair a b) f:∀(x:b)b): (Pair a b)
   (Pair.snd.mut a b (Pair.new a b x y) f) = (Pair.new a b x (f y))
 
+
 // Triple
 // ======
 
@@ -56,6 +57,18 @@ Bool: Type
 
 (Triple.get a:Type b:Type c:Type d:Type t:(Triple a b c) f:∀(x:a)∀(y:b)∀(z:c)d): d
   (Triple.get a b c d (Triple.new a b c x y z) f) = (f x y z)
+
+// Tuple2
+// ======
+
+(Tuple2 a:Type b:Type): Type
+  (Tuple2 a b) = ∀(p: Type) ∀(new: ∀(x0: a) ∀(x1: b) p) p
+
+(Tuple2.new a:Type b:Type x0:a x1:b): (Tuple2 a b)
+  (Tuple2.new a b x0 x1) = λp λnew (new x0 x1)
+
+(Tuple2.get a:Type b:Type c:Type p:(Tuple2 a b) f:∀(x:a)∀(y:b)c): c
+  (Tuple2.get a b c tup f) = (tup c f)
 
 // Maybe
 // =====
@@ -101,6 +114,13 @@ Bool: Type
 (List.fold a:Type r:Type xs:(List a) nil:r cons:∀(x:a)∀(xs:r)r): r
   (List.fold a r (List.nil a)       nil cons) = nil
   (List.fold a r (List.cons a x xs) nil cons) = (cons x (List.fold a r xs nil cons))
+
+(List.to_map a:Type list:(List (Pair U32 a))) : (Map a)
+  (List.to_map a list) = (List.to_map.go a list (Map.empty a))
+
+(List.to_map.go a:Type list:(List (Pair U32 a)) map:(Map a)) : (Map a)
+  (List.to_map.go a (List.nil (Pair U32 a))                              map) = map
+  (List.to_map.go a (List.cons (Pair U32 a) (Pair.new U32 a key val) xs) map) = (List.to_map.go a xs (Map.set a map key val))
 
 // String
 // ======
@@ -149,88 +169,6 @@ String : Type
   (String.join (List.cons String x (List.nil String))  sep) = x
   (String.join (List.cons String x xs)                 sep) =
     (String.flatten (List.cons String x (List.cons String (String.join xs sep) (List.nil String))))
-
-// Array
-// =====
-
-(Braun t:Type): Type
-  (Braun.tip t:Type): (Braun t) 
-  (Braun.tie t:Type left: (Braun t) mid: t right: (Braun t)) : (Braun t)
-
-(Braun.empty a:Type) : (Braun a)
-  (Braun.empty a) = (Braun.tip a)
-
-(Array t): Type
-  (Array.new t:Type size:U32 tree:(Braun t)): (Array t)
-
-(Array.empty t:Type) : (Array t)
-(Array.empty t) = (Array.new t 0 (Braun.empty t))
-
-(Array.push t:Type arr:(Array t) value: t) : (Array t)
-(Array.push t (Array.new t n tree) v) = (Array.new t (+ n 1) (Braun.push t (+ n 1) (& (+ n 1) 1) tree v))
-
-(Braun.push t:Type n:U32 o:U32 tree:(Braun t) value: t) : (Braun t)
-  (Braun.push t 1 o tree value) = (Braun.tie t (Braun.tip t) value (Braun.tip t))
-  (Braun.push t n 0 (Braun.tie t l x r) v) = (Braun.tie t (Braun.push t (>> n 1) (& (>> n 1) 1) l v) x r)
-  (Braun.push t n 1 (Braun.tie t l x r) v) = (Braun.tie t l x (Braun.push t (>> n 1) (& (>> n 1) 1) r v))
-
-(Array.pop t:Type arr:(Array t)) : (Array t)
-(Array.pop t (Array.new t n tree)) = (Array.new t (- n 1) (Braun.pop t n (& n 1) tree))
-
-(Braun.pop t:Type n:U32 o:U32 tree:(Braun t)) : (Braun t)
-  (Braun.pop t 1 o tree) = (Braun.tip t)
-  (Braun.pop t n 0 (Braun.tie t l x r)) = (Braun.tie t (Braun.pop t (>> n 1) (& (>> n 1) 1) l) x r)
-  (Braun.pop t n 1 (Braun.tie t l x r)) = (Braun.tie t l x (Braun.pop t (>> n 1) (& (>> n 1) 1) r))
-
-(Array.mut t:Type arr:(Array t) i:U32 f:(∀(x:t)t)) : (Array t)
-  (Array.mut t (Array.new t size tree) i f) = (Array.mut.aux t (< i size) i f size tree)
-(Array.mut.aux t:Type cond:U32 i:U32 f:(∀(x:t)t) size:U32 tree:(Braun t)): (Array t)
-  (Array.mut.aux t 0 i f size tree) = (Array.new t size tree)
-  (Array.mut.aux t 1 i f size tree) = (Array.new t size (Braun.mut t (+ i 1) f (& (+ i 1) 1) tree))
-
-(Braun.mut t:Type i:U32 f:(∀(x:t)t) o:U32 tree:(Braun t)) : (Braun t)
-  (Braun.mut t 1 f o (Braun.tie t l x r)) = (Braun.tie t l (f x) r)
-  (Braun.mut t i f 0 (Braun.tie t l x r)) = (Braun.tie t (Braun.mut t (>> i 1) f (& (>> i 1) 1) l) x r)
-  (Braun.mut t i f 1 (Braun.tie t l x r)) = (Braun.tie t l x (Braun.mut t (>> i 1) f (& (>> i 1) 1) r))
-
-(Array.set t:Type arr:(Array t) i:U32 value:t) : (Array t)
-  (Array.set t (Array.new t size tree) i value) = (Array.mut t (Array.new t size tree) i λx(value))
-
-(Array.get t:Type arr:(Array t) i:U32) : (Maybe t)
-  (Array.get t (Array.new t size tree) idx) = (Array.get.aux t (< idx size) idx tree)
-(Array.get.aux t:Type cond:U32 idx:U32 tree:(Braun t)) : (Maybe t)
-  (Array.get.aux t 0 idx tree) = (Maybe.none t)
-  (Array.get.aux t 1 idx tree) = (Maybe.some t (Braun.get t (+ idx 1) (& (+ idx 1) 1) tree))
-
-(Braun.get t:Type idx: U32 o: U32 tree:(Braun t)) : t
-  (Braun.get t 1 o (Braun.tie t l x r))   = x
-  (Braun.get t idx 0 (Braun.tie t l x r)) = (Braun.get t (>> idx 1) (& (>> idx 1) 1) l)
-  (Braun.get t idx 1 (Braun.tie t l x r)) = (Braun.get t (>> idx 1) (& (>> idx 1) 1) r)
-
-
-// FIXME: syntax error and wrong return type
-// (Array.got t:Type arr:(Array t) idx: U32) : (Pair (Array t) (Maybe t))
-//   (Array.got t (Array.new t size tree) idx) = (Array.got.aux t (< idx size) idx size tree)
-// (Array.got.aux t:Type cond:U32 idx:U32 size:U32 tree:(Braun t)) : (Pair (Array t) (Maybe t))
-//   (Array.got.aux t 0 idx size tree) = (Pair.new _ (Maybe t) (Array.new t size tree) (Maybe.none t))
-//   (Array.got.aux t 1 idx size tree) = ((Braun.got t (+ idx 1) (& (+ idx 1) 1) t) λtup λv (Pair.new _ (Maybe t) (Array.new t size tree) (Maybe.some t v)))
-// (Braun.got a:Type idx: U32 o: U32 tree:(Braun t)) :  ∀(p: Type) (∀(t: ∀(y: Braun a)) ∀(z: a) p)
-//   (Braun.got a 1 o (Braun.tie a l x r)) = λp λt (t (Braun.tie a l x r) x)
-//   (Braun.got a i 0 (Braun.tie a l x r)) = ((Braun.got a (>> i 1) (& (>> i 1) 1) l) λl λv λp λtup (tup (Braun.tie a l x r) v))
-//   (Braun.got a i 1 (Braun.tie a l x r)) = ((Braun.got a (>> i 1) (& (>> i 1) 1) r) λr λv λp λtup (tup (Braun.tie a l x r) v))
-
-// (Array.size t:Type arr:(Array t)) : (Pair (Array t) U32)
-//   (Array.size t (Array.new t size tree)) = (Pair.new _ U32 (Array.new t size tree) size)
-
-(Array.range range:U32) : (Array U32)
-  (Array.range 0) = (Array.empty U32)
-  (Array.range n) = (Array.push U32 (Array.range (- n 1)) (- n 1))
-
-(Array.to_list t:Type (Array t)) : (List t)
-  (Array.to_list t (Array.new t size tree)) = ((Braun.to_list t tree) (List.nil t))
-(Braun.to_list t:Type tree:(Braun t)) : ∀(x:(List t)) (List t)
-  (Braun.to_list t (Braun.tie t l x r)) = λz((Braun.to_list t l) (List.cons t x ((Braun.to_list t r) z)))
-  (Braun.to_list t (Braun.tip t))       = λz(z)
 
 // Map
 // ===
@@ -331,9 +269,91 @@ String : Type
   (Map.to_list.go a (Map.nodes a lft rgt) key) = λx
     ((Map.to_list.go a lft (* key 2)) ((Map.to_list.go a rgt (+ (* key 2) 1)) x))
 
-(List.to_map a:Type list:(List (Pair U32 a))) : (Map a)
-  (List.to_map a list) = (List.to_map.go a list (Map.empty a))
+// Braun Tree
+// ==========
 
-(List.to_map.go a:Type list:(List (Pair U32 a)) map:(Map a)) : (Map a)
-  (List.to_map.go a (List.nil (Pair U32 a))                              map) = map
-  (List.to_map.go a (List.cons (Pair U32 a) (Pair.new U32 a key val) xs) map) = (List.to_map.go a xs (Map.set a map key val))
+(Braun t:Type): Type
+  (Braun.tip t:Type): (Braun t) 
+  (Braun.tie t:Type left: (Braun t) mid: t right: (Braun t)) : (Braun t)
+
+(Braun.empty a:Type) : (Braun a)
+  (Braun.empty a) = (Braun.tip a)
+
+(Braun.push t:Type n:U32 o:U32 tree:(Braun t) value: t) : (Braun t)
+  (Braun.push t 1 o tree value) = (Braun.tie t (Braun.tip t) value (Braun.tip t))
+  (Braun.push t n 0 (Braun.tie t l x r) v) = (Braun.tie t (Braun.push t (>> n 1) (& (>> n 1) 1) l v) x r)
+  (Braun.push t n 1 (Braun.tie t l x r) v) = (Braun.tie t l x (Braun.push t (>> n 1) (& (>> n 1) 1) r v))
+
+(Braun.pop t:Type n:U32 o:U32 tree:(Braun t)) : (Braun t)
+  (Braun.pop t 1 o tree) = (Braun.tip t)
+  (Braun.pop t n 0 (Braun.tie t l x r)) = (Braun.tie t (Braun.pop t (>> n 1) (& (>> n 1) 1) l) x r)
+  (Braun.pop t n 1 (Braun.tie t l x r)) = (Braun.tie t l x (Braun.pop t (>> n 1) (& (>> n 1) 1) r))
+
+(Braun.mut t:Type i:U32 f:(∀(x:t)t) o:U32 tree:(Braun t)) : (Braun t)
+  (Braun.mut t 1 f o (Braun.tie t l x r)) = (Braun.tie t l (f x) r)
+  (Braun.mut t i f 0 (Braun.tie t l x r)) = (Braun.tie t (Braun.mut t (>> i 1) f (& (>> i 1) 1) l) x r)
+  (Braun.mut t i f 1 (Braun.tie t l x r)) = (Braun.tie t l x (Braun.mut t (>> i 1) f (& (>> i 1) 1) r))
+
+(Braun.get t:Type idx: U32 o: U32 tree:(Braun t)) : t
+  (Braun.get t 1 o (Braun.tie t l x r))   = x
+  (Braun.get t idx 0 (Braun.tie t l x r)) = (Braun.get t (>> idx 1) (& (>> idx 1) 1) l)
+  (Braun.get t idx 1 (Braun.tie t l x r)) = (Braun.get t (>> idx 1) (& (>> idx 1) 1) r)
+
+(Braun.got a:Type idx: U32 o: U32 tree:(Braun a)) : (Tuple2 (Braun a) a)
+  (Braun.got t 1 o (Braun.tie t lft x rgt)) =
+    λp λnew (new (Braun.tie t lft x rgt) x)
+  (Braun.got u i 0 (Braun.tie u lft x rgt)) =
+    let lft = (Braun.got u (>> i 1) (& (>> i 1) 1) lft)
+    (lft (Tuple2 (Braun u) u) λlft λgot
+      λp λnew (new (Braun.tie u lft x rgt) got))
+
+(Braun.to_list t:Type tree:(Braun t)) : ∀(x:(List t)) (List t)
+  (Braun.to_list t (Braun.tie t l x r)) = λz((Braun.to_list t l) (List.cons t x ((Braun.to_list t r) z)))
+  (Braun.to_list t (Braun.tip t))       = λz(z)
+
+// Array
+// =====
+
+(Array t:Type): Type
+  (Array.new t:Type size:U32 tree:(Braun t)): (Array t)
+
+(Array.empty t:Type) : (Array t)
+(Array.empty t) = (Array.new t 0 (Braun.empty t))
+
+(Array.push t:Type arr:(Array t) value: t) : (Array t)
+(Array.push t (Array.new t n tree) v) = (Array.new t (+ n 1) (Braun.push t (+ n 1) (& (+ n 1) 1) tree v))
+
+(Array.pop t:Type arr:(Array t)) : (Array t)
+(Array.pop t (Array.new t n tree)) = (Array.new t (- n 1) (Braun.pop t n (& n 1) tree))
+
+(Array.mut t:Type arr:(Array t) i:U32 f:(∀(x:t)t)) : (Array t)
+  (Array.mut t (Array.new t size tree) i f) = (Array.mut.aux t (< i size) i f size tree)
+(Array.mut.aux t:Type cond:U32 i:U32 f:(∀(x:t)t) size:U32 tree:(Braun t)): (Array t)
+  (Array.mut.aux t 0 i f size tree) = (Array.new t size tree)
+  (Array.mut.aux t 1 i f size tree) = (Array.new t size (Braun.mut t (+ i 1) f (& (+ i 1) 1) tree))
+
+(Array.set t:Type arr:(Array t) i:U32 value:t) : (Array t)
+  (Array.set t (Array.new t size tree) i value) = (Array.mut t (Array.new t size tree) i λx(value))
+
+(Array.get t:Type arr:(Array t) i:U32) : (Maybe t)
+  (Array.get t (Array.new t size tree) idx) = (Array.get.aux t (< idx size) idx tree)
+(Array.get.aux t:Type cond:U32 idx:U32 tree:(Braun t)) : (Maybe t)
+  (Array.get.aux t 0 idx tree) = (Maybe.none t)
+  (Array.get.aux t 1 idx tree) = (Maybe.some t (Braun.get t (+ idx 1) (& (+ idx 1) 1) tree))
+
+(Array.got t:Type arr:(Array t) idx: U32) : (Pair (Array t) (Maybe t))
+  (Array.got t (Array.new t size tree) idx) = (Array.got.aux t (< idx size) idx size tree)
+
+(Array.got.aux t:Type cond:U32 idx:U32 size:U32 tree:(Braun t)) : (Pair (Array t) (Maybe t))
+  (Array.got.aux t 0 idx size tree) = (Pair.new (Array t) (Maybe t) (Array.new t size tree) (Maybe.none t))
+  (Array.got.aux t 1 idx size tree) =
+    let tup = (Braun.got t (+ idx 1) (& (+ idx 1) 1) tree)
+    let ret = (tup _ λtree λval (Pair.new _ _ (Array.new t size tree) (Maybe.some t val)))
+    ret
+
+(Array.range range:U32) : (Array U32)
+  (Array.range 0) = (Array.empty U32)
+  (Array.range n) = (Array.push U32 (Array.range (- n 1)) (- n 1))
+
+(Array.to_list t:Type (Array t)) : (List t)
+  (Array.to_list t (Array.new t size tree)) = ((Braun.to_list t tree) (List.nil t))

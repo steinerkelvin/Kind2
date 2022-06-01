@@ -25,7 +25,7 @@ Bool: Type
 
 (Bool.if a:Type Bool if_t:a if_f:a): a
   (Bool.if a Bool.false t f) = f
-  (Bool.if a Bool.true  t f) = f
+  (Bool.if a Bool.true  t f) = t
 
 // Pair
 // ====
@@ -438,20 +438,20 @@ Code = String
   (Parser.get_name.go_2 head (Pair.new Code String code name)) = (Pair.new Code String code (StrCons head name))
 
 // TODO: Finish this
-(Parser.matcher consume:Bool text:∀(cond:Char)Bool) : (Parser Bool)
-  // (Parser.matcher consume text) = λcode (Parser.matcher.go String text code consume λx(x))
-// (Parser.matcher.go a:String text:(∀Char Bool) code:Code consume:Bool redo:(∀(red_p:(Bool))(Parser a))): (Answer Bool)
-  // (Parser.matcher.go a  List.nil                ys consume redo) = (Answer.parsed Bool ((Bool.if a consume λx(x) redo) ys) Bool.true)
-  // (Parser.matcher.go a (List.cons String x xs)         StrNil consume redo) = (Answer.parsed Bool (redo StrNil) Bool.false)
-  // (Parser.matcher.go a (List.cons String x xs) (StrCons y ys) consume redo) = (Parser.matcher_test a (x y) xs y ys consume redo)
-  // (Parser.matcher_test a:Type cond:U32 xs:(List a) ys: String) : (Answer Bool)
-    // (Parser.matcher_test 0 xs y ys consume redo) = (Answer.parsed (redo (StrCons y ys)) False)
-    // (Parser.matcher_test 1 xs y ys consume redo) = (Parser.matcher.go xs ys consume λk(redo (StrCons y k)))
+(Parser.matcher consume:Bool text:String) : (Parser Bool)
+  (Parser.matcher consume text) = λcode (Parser.matcher.go text code consume λx(x))
 
-// TODO: Finish this
-(Parser.text_comparer str:String) : ∀(c:Char)(Bool)
-// (Parser.text_comparer StrNil)         = (List.nil String)
-// (Parser.text_comparer (StrCons x xs)) = (List.cons String λc(== x c) (Parser.text_comparer xs))
+(Parser.matcher.go text:String code:Code consume:Bool redo:(∀(x:String)Code)) : (Answer Bool)
+  // (Parser.matcher.go (List.nil U32) ys consume redo) = (Answer.parsed Bool ((Bool.if _ consume λx(x) redo) ys) Bool.true)
+  (Parser.matcher.go (List.cons U32 x xs) StrNil consume redo) = (Answer.parsed Bool (redo StrNil) Bool.false)
+  // (Parser.matcher.go (List.cons U32 x xs) (StrCons y ys) consume redo) = (Parser.matcher_test (x y) xs ys consume redo)
+(Parser.matcher_test cond:U32 xs:String ys:String consume:Bool redo:(∀(x:String)Code)) : (Answer Bool)
+  // (Parser.matcher_test 0 xs y ys consume redo) = (Answer.parsed Bool (redo (StrCons y ys)) Bool.false)
+  // (Parser.matcher_test 1 xs y ys consume redo) = (Parser.matcher.go xs ys consume λk(redo (StrCons y k)))
+
+(Parser.text_comparer str:String) : ∀(c:Char)(List U32)
+(Parser.text_comparer StrNil)         = λc (List.nil U32)
+(Parser.text_comparer (StrCons x xs)) = λc (List.cons U32 (== x c) (Parser.text_comparer xs))
 
 (Parser.peek_conds conds:(∀(x:Char)Bool)) : (Parser Bool)
 (Parser.peek_conds conds) = λcode ((Parser.matcher Bool.false conds) (Parser.skipper code))

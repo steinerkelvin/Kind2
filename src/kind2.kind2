@@ -128,6 +128,25 @@ Bool: Type
   (List.to_map.go a (List.nil (Pair U32 a))                              map) = map
   (List.to_map.go a (List.cons (Pair U32 a) (Pair.new U32 a key val) xs) map) = (List.to_map.go a xs (Map.set a map key val))
 
+// Name
+// ====
+
+Name : Type
+  (Name.new str:String hash:U32) : Name
+
+(Name.make str:String) : Name
+  (Name.make str) = (Name.new str (String.hash str))
+
+(Name.get_hash name:Name) : U32
+  (Name.get_hash (Name.new str hash)) = hash
+
+(Name.get_string name:Name) : String
+  (Name.get_string (Name.new str hash)) = str
+  (Name.get_string (Name.new str hash)) = (String.concat TodoMsg.TODO str)
+
+(Name.equal a_name:Name b_name:Name) : U32
+  (Name.equal (Name.new a_str a_hash) (Name.new b_str b_hash)) = (== a_hash b_hash)
+
 // String
 // ======
 

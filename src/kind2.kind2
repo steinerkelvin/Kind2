@@ -437,9 +437,6 @@ Code = String
 (Parser.get_name.go_2 head:Char name_pair:(Pair String String)) : (Pair String String)
   (Parser.get_name.go_2 head (Pair.new Code String code name)) = (Pair.new Code String code (StrCons head name))
 
-(Id a:Type x:a) : a
-(Id a x) = x
-
 (Parser.matcher consume:Bool text:(List (∀(x:Char)U32))) : (Parser Bool)
   (Parser.matcher consume text) = λcode (Parser.matcher.go text code consume λx(x))
 (Parser.matcher.go text:(List (∀(x:Char)U32)) code:Code consume:Bool redo:(∀(x:String)Code)) : (Answer Bool)
@@ -508,10 +505,10 @@ Code = String
   (Parser.parse_end.go (StrCons x xs)) = (Answer.parsed Bool (StrCons x xs) Bool.false)
 
 // // Parses until a stop condition is true.
-(Parser.parse_until a:Type stop:(Parser Bool) parser:(Parser a)) : (Parser (List a))
+// (Parser.parse_until a:Type stop:(Parser Bool) parser:(Parser a)) : (Parser (List a))
   // (Parser.parse_until a stop parser) = (Parser.bind a stop λs (Parser.parse_until.go a s stop parser))
 
-(Parser.parse_until.go a:Type s:Bool stop:(Parser Bool) parser:(Parser a)) : (Answer (List a))
+// (Parser.parse_until.go a:Type s:Bool stop:(Parser Bool) parser:(Parser a)) : (Answer (List a))
   // (Parser.parse_until.go a Bool.false stop parser) =
   //   (Parser.bind a parser                   λhead 
   //   (Parser.bind a (Parser.parse_until a stop parser) λtail 

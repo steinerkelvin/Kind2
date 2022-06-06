@@ -555,4 +555,65 @@ Term : Type
   (Term.eql val0:Term val1:Term)                     : Term
   (Term.rwt name:Name witn:Term goal:Term expr:Term) : Term
 
+(Parser.parse_var) : (Parser (Maybe Term))
+  (Parser.parse_var) = (Parser.bind String (Maybe Term) (Parser.parse_name) λname (Parser.parse_var.0 name))
 
+Text.Type : String
+  Text.Type = (StrCons 84 (StrCons 121 (StrCons 112 (StrCons 101 StrNil))))
+Text.U32 : String
+  Text.U32 = (StrCons 85 (StrCons 51 (StrCons 50 StrNil)))
+
+Text.Colon : String
+  Text.Colon = (StrCons 58 StrNil)
+
+(Parser.parse_var.0 name:String) : (Parser (Maybe Term))
+  (Parser.parse_var.0 StrNil)   = (Parser.done _ (Maybe.none Term))
+  (Parser.parse_var.0 (StrCons x xs)) = (Parser.parse_var.1
+    // (String.equal (StrCons x xs) "Type")
+    // (String.equal (StrCons x xs) "U32")
+    (String.equal (StrCons x xs) Text.Type)
+    (String.equal (StrCons x xs) Text.U32)
+    (Char.is_upper x)
+    (Char.is_numeric x)
+    (StrCons x xs))
+
+(Parser.parse_var.1 is_type:U32 is_u32:U32 is_upper:U32 is_numeric:U32 code:String) : (Parser (Maybe Term))
+  (Parser.parse_var.1 1 _ _ _ str) = (Parser.done (Maybe Term) (Maybe.some Term Term.typ))
+  (Parser.parse_var.1 _ 1 _ _ str) = (Parser.done (Maybe Term) (Maybe.some Term Term.u32))
+  (Parser.parse_var.1 _ _ 1 _ str) = (Parser.done (Maybe Term) (Maybe.some Term (Term.cts (Name.make str) (List.nil Term))))
+  (Parser.parse_var.1 _ _ _ 1 str) = (Parser.done (Maybe Term) (Maybe.some Term (Term.n32 (U32.read str))))
+  // (Parser.parse_var.1 _ _ _ _ str) = (Parser.bind (Maybe Term) (Parser.match_text Text.Colon) λis_ann (Parser.parse_var.2 (Bool.if U32 is_ann 1 0) str))
+
+// (Parser.parse_var.2 is_ann:U32 code:String) : (Parser (Maybe Term))
+  // (Parser.parse_var.2 1 str) = (Parser.bind ParseTerm λterm (Done (Some (Ann (Var (Name.Make str)) term))))
+  // (Parser.parse_var.2 0 str) = (Parser.done (Some (Var (Name.Make str))))
+// (Parser.parse_term) : (Parser Term)
+//   (Parser.parse_term) =
+//     (Parser.bind _ _ Parser.parse_term.ini λini
+//     (Parser.bind _ _ Parser.parse_term.end λend
+//     (Parser.done _ (end ini))))
+
+// (Parser.parse_term.ini) : Parser (Maybe Term)
+//   (Parser.parse_term.ini) = (Parser.grammar (Maybe Term) [
+//     // ParseDef,
+//     // ParseLet,
+//     // ParseCts,
+//     // ParseO32,
+//     // ParseAll,
+//     // ParseLam,
+//     // ParseApp,
+//     // ParseChr,
+//     // ParseStr,
+//     // ParseGol,
+//     // ParseRfl,
+//     // ParseRwt,
+//     // ParseAnnEql,
+//     // ParseHol,
+//     Parser.parse_var,
+//   ])
+
+//   (Parser.parse_term.end) = (Parser.grammar (Maybe Term) [
+//     //(ParseAnn)
+//     //(ParseEql)
+//     (Parser.done _ (Maybe.some _ λx(x)))
+//   ])

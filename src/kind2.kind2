@@ -610,20 +610,21 @@ Op : Type
  Op.NEQ : Op
 
 Term : Type
-  (Term.def name:String expr:Term body:Term)           : Term
-  (Term.let name:String expr:Term body:Term)           : Term
-  (Term.cts name:String list:(List Term))              : Term
-  (Term.o32 op:Op val0:Term val1:Term)                 : Term
-  (Term.lam name:String body:Term)                     : Term
-  (Term.app f:Term x:Term)                             : Term
-  (Term.var name:String)                               : Term
-  (Term.n32 value:U32)                                 : Term
-  (Term.u32)                                           : Term
-  (Term.all name:String type:Term body:Term)           : Term
-  (Term.gol name:String)                               : Term
-  (Term.typ)                                           : Term
-  (Term.ann expr:String type:Term)                     : Term
-  (Term.hol hash:String)                               : Term     
-  (Term.eql val0:Term val1:Term)                       : Term
-  (Term.rwt name:String witn:Term goal:Term expr:Term) : Term
+  (Term.def name:Name expr:Term body:Term)           : Term
+  (Term.let name:Name expr:Term body:Term)           : Term
+  (Term.cts name:Name list:(List Term))              : Term
+  (Term.o32 op:Op val0:Term val1:Term)               : Term
+  (Term.lam name:Name body:Term)                     : Term
+  (Term.app f:Term x:Term)                           : Term
+  (Term.var name:Name)                               : Term
+  (Term.n32 value:U32)                               : Term
+  (Term.u32)                                         : Term
+  (Term.all name:Name type:Term body:Term)           : Term
+  (Term.gol name:Name)                               : Term
+  (Term.typ)                                         : Term
+  (Term.ann expr:Name type:Term)                     : Term
+  (Term.hol hash:Name)                               : Term     
+  (Term.eql val0:Term val1:Term)                     : Term
+  (Term.rwt name:Name witn:Term goal:Term expr:Term) : Term
+
 

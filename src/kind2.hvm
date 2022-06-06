@@ -334,6 +334,11 @@ NewLine = (StrCons 10 StrNil)
 // (IsSpace Char) : U32
 (IsSpace chr) = (| (== 10 chr) (== ' ' chr))
 
+// (ParseOne) : (Parser U32)
+(ParseOne) = λcode (ParseOne.Go code)
+  (ParseOne.Go (StrCons x xs)) = (Parsed xs x)
+  (ParseOne.Go StrNil)         = (Parsed StrNil 0)
+
 // (GetName String) : (Pair code:String name:String)
 (GetName) = λcode (GetName.Go code)
   (GetName.Go StrNil)                 = (Pair StrNil StrNil)
@@ -417,7 +422,7 @@ ParseEnd = λcode (ParseEnd.Go code)
   (ParseEnd.Go (StrCons x xs)) = (Parsed (StrCons x xs) False)
 
 // Parses until a stop condition is true.
-// (ParseUntil parser:(Parser a) stop:(Parser Bool)) : (Parser (List a))
+// (ParseUntil stop:(Parser Bool) parser:(Parser a) ) : (Parser (List a))
 (ParseUntil stop parser) = (Bind stop λs (ParseUntil.Go s stop parser))
   (ParseUntil.Go False stop parser) =
     (Bind parser                   λhead 
@@ -548,6 +553,20 @@ ParseEnd = λcode (ParseEnd.Go code)
   (Bind (ParseText ")") λskip
   (Done (O32 oper val0 val1))))))))
 
+// (ParseChr) : (Parser (Maybe Term))
+(ParseChr) = (Guard (MatchText "'")
+  (Bind ParseOne        λchr
+  (Bind (ParseText "'") λskp
+  (Done (N32 chr)))))
+
+// (ParseStr) : (Parser (Maybe Term))
+(ParseStr) = (Guard (MatchText (StrCons '"' StrNil))
+  (Bind (ParseUntil (MatchText (StrCons '"' StrNil)) ParseOne) λchars
+  (Done (ParseStr.Make chars))))
+
+(ParseStr.Make (Cons x xs)) = (Cts "String.cons" [(N32 x) (ParseStr.Make xs)])
+(ParseStr.Make Nil)         = (Cts "String.nil" [])
+
 (ParseOper) = (Grammar [
   (Guard (MatchText "+")  (Done ADD))
   (Guard (MatchText "-")  (Done SUB))
@@ -618,6 +637,8 @@ ParseEnd = λcode (ParseEnd.Go code)
     ParseAll,
     ParseLam,
     ParseApp,
+    ParseChr,
+    ParseStr,
     ParseHol,
     ParseRfl,
     ParseRwt,
@@ -1798,7 +1819,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
 
 
-(Test.0) = "
+(Test.0) = `
   // Booleans
   Bool : Type
     True  : Bool
@@ -1907,9 +1928,12 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       (Succ (Succ (Succ (Succ (Succ (Succ (Succ
       Zero))))))))))))))))
 
-  Main : {Foo == Zero}
-    Main = refl Zero
-"
+  //Main : {Foo == Zero}
+    //Main = refl Zero
+
+  Main : U32
+    Main = "test"
+`
 
 (Kind2.Check code) = (Kind2.Check.Go (File.Read code))
   (Kind2.Check.Go (Er err))  = err
@@ -1919,5 +1943,5 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Kind2.Run.Go (Er err)  expr) = err
   (Kind2.Run.Go (Ok file) expr) = (Term.Show file (Normal file (Term.Read file expr)))
 
-(Main n) = (Kind2.Check Test.0)
-//(Main n) = (Kind2.Run Test.0)
+//(Main n) = (Kind2.Check Test.0)
+(Main n) = (Kind2.Run Test.0)

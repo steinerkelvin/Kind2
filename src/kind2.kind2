@@ -171,10 +171,9 @@ String : Type
   (String.map (StrCons x xs) f) = (StrCons (f x) (String.map xs f))
 
 (String.join xs:(List String) sep:String) : String
-  (String.join (List.nil String)                sep) = StrNil
+  (String.join (List.nil String)                       sep) = StrNil
   (String.join (List.cons String x (List.nil String))  sep) = x
-  (String.join (List.cons String x xs)                 sep) =
-    (String.flatten (List.cons String x (List.cons String (String.join xs sep) (List.nil String))))
+  (String.join (List.cons String x xs)                 sep) = (String.flatten (List.cons String x (List.cons String (String.join xs sep) (List.nil String))))
 
 // Map
 // ===
@@ -324,13 +323,13 @@ String : Type
   (Array.new t:Type size:U32 tree:(Braun t)): (Array t)
 
 (Array.empty t:Type) : (Array t)
-(Array.empty t) = (Array.new t 0 (Braun.empty t))
+  (Array.empty t) = (Array.new t 0 (Braun.empty t))
 
 (Array.push t:Type arr:(Array t) value: t) : (Array t)
-(Array.push t (Array.new t n tree) v) = (Array.new t (+ n 1) (Braun.push t (+ n 1) (& (+ n 1) 1) tree v))
+  (Array.push t (Array.new t n tree) v) = (Array.new t (+ n 1) (Braun.push t (+ n 1) (& (+ n 1) 1) tree v))
 
 (Array.pop t:Type arr:(Array t)) : (Array t)
-(Array.pop t (Array.new t n tree)) = (Array.new t (- n 1) (Braun.pop t n (& n 1) tree))
+  (Array.pop t (Array.new t n tree)) = (Array.new t (- n 1) (Braun.pop t n (& n 1) tree))
 
 (Array.mut t:Type arr:(Array t) i:U32 f:(∀(x:t)t)) : (Array t)
   (Array.mut t (Array.new t size tree) i f) = (Array.mut.aux t (< i size) i f size tree)
@@ -368,14 +367,14 @@ String : Type
 // ======
 
 Code : Type
-Code = String
+  Code = String
 
 (Answer a:Type): Type
   (Answer.parsed a:Type code:(Code) result:a) : (Answer a)
   (Answer.failed a:Type String) : (Answer a)
 
 (Parser a:Type): Type
-(Parser a) = ∀(x: Code) (Answer a)
+  (Parser a) = ∀(x: Code) (Answer a)
 
 (Parser.is_name_char chr:Char) : Char
   (Parser.is_name_char chr) = 
@@ -430,10 +429,10 @@ Code = String
   (Parser.bind.go a b f (Answer.failed a err))        = (Answer.failed b err)
 
 (Parser.done a:Type value:a) : (Parser a)
-(Parser.done a value) = λcode (Answer.parsed a code value)
+  (Parser.done a value) = λcode (Answer.parsed a code value)
 
 (Char.is_space chr:Char) : U32
-(Char.is_space chr) = (| (== 10 chr) (== 32 chr))
+  (Char.is_space chr) = (| (== 10 chr) (== 32 chr))
 
 (Parser.get_name) : ∀(code: Code)(Pair String String)
   (Parser.get_name) = λcode (Parser.get_name.go code)
@@ -466,19 +465,19 @@ Code = String
   (Parser.text_comparer (StrCons x xs)) = (List.cons ∀(c:Char)U32 λc(== x c) (Parser.text_comparer xs))
 
 (Parser.peek_conds conds:(List (∀(x:Char)U32))) : (Parser Bool)
-(Parser.peek_conds conds) = λcode ((Parser.matcher Bool.false conds) (Parser.skipper code))
+  (Parser.peek_conds conds) = λcode ((Parser.matcher Bool.false conds) (Parser.skipper code))
 
 (Parser.peek_text text:String) : (Parser Bool)
-(Parser.peek_text text) = λcode ((Parser.matcher Bool.false (Parser.text_comparer text)) (Parser.skipper code))
+  (Parser.peek_text text) = λcode ((Parser.matcher Bool.false (Parser.text_comparer text)) (Parser.skipper code))
 
 (Parser.match_conds conds:(List (∀(x:Char)U32))) : (Parser Bool)
-(Parser.match_conds conds) = λcode ((Parser.matcher Bool.true conds) (Parser.skipper code))
+  (Parser.match_conds conds) = λcode ((Parser.matcher Bool.true conds) (Parser.skipper code))
 
 (Parser.match_text_here text:String) : (Parser Bool)
-(Parser.match_text_here text) = λcode ((Parser.matcher Bool.true (Parser.text_comparer text)) code)
+  (Parser.match_text_here text) = λcode ((Parser.matcher Bool.true (Parser.text_comparer text)) code)
 
 (Parser.match_text text:String) : (Parser Bool)
-(Parser.match_text text) = λcode ((Parser.matcher Bool.true (Parser.text_comparer text)) (Parser.skipper code))
+  (Parser.match_text text) = λcode ((Parser.matcher Bool.true (Parser.text_comparer text)) (Parser.skipper code))
 
 //(Parser.bind.go a:Type b:Type f:(∀(x:a)(Parser b)) a_res:(Answer a)) : (Answer b)
 
@@ -492,7 +491,7 @@ Code = String
   (Parser.text_here_got (Bool.true))  = (Parser.done Unit Unit.new)
 
 (Parser.parse_text text:String) : (Parser Unit)
-(Parser.parse_text text) = λcode ((Parser.parse_text_here text) (Parser.skipper code))
+  (Parser.parse_text text) = λcode ((Parser.parse_text_here text) (Parser.skipper code))
 
 // Skips spaces and comments
 
@@ -520,7 +519,7 @@ Code = String
   (Parser.parse_name_here.go (Pair.new String String code name)) = (Answer.parsed String code name)
 
 (Parser.parse_name) : (Parser String)
-(Parser.parse_name) = λcode ((Parser.parse_name_here) (Parser.skipper code))
+  (Parser.parse_name) = λcode ((Parser.parse_name_here) (Parser.skipper code))
 
 (Parser.parse_end) : (Parser Bool)
   Parser.parse_end = λcode (Parser.parse_end.go code)
@@ -530,22 +529,23 @@ Code = String
 
 // Parses until a stop condition is true.
 (Parser.parse_until a:Type stop:(Parser Bool) parser:(Parser a)) : (Parser (List a))
-  (Parser.parse_until a stop parser) = (Parser.bind a stop λs (Parser.parse_until.go a s stop parser))
+  (Parser.parse_until a stop parser) = (Parser.bind Bool (List a) stop λs (Parser.parse_until.go a s stop parser))
 
-// (Parser.parse_until.go a:Type s:Bool stop:(Parser Bool) parser:(Parser a)) : (Answer (List a))
-  // (Parser.parse_until.go a Bool.false stop parser) =
-  //   (Parser.bind a parser                   λhead 
-  //   (Parser.bind a (Parser.parse_until a stop parser) λtail 
-  //   (Parser.done (List.cons a head tail))))
-  // (Parser.parse_until.go a Bool.true stop parser) = (Parser.done a (List.nil a))
+(Parser.parse_until.go a:Type s:Bool stop:(Parser Bool) parser:(Parser a)) : (Parser (List a))
+  (Parser.parse_until.go a Bool.false stop parser) =
+    (Parser.bind a        (List a) parser                             λhead 
+    (Parser.bind (List a) (List a) (Parser.parse_until a stop parser) λtail 
+    (Parser.done (List a) (List.cons a head tail))))
+  (Parser.parse_until.go a Bool.true stop parser) =
+    (Parser.done (List a) (List.nil a))
 
-//// (ErrorMsg.TODO) : String
-////   (ErrorMsg.TODO) = (StrCons 84 (StrCons 79 (StrCons 68 (StrCons 79 StrNil))))
+//(ErrorMsg.TODO) : String
+  //(ErrorMsg.TODO) = (StrCons 84 (StrCons 79 (StrCons 68 (StrCons 79 StrNil))))
 
-//// // TODO: Finish this
-//// (Parser.grammar a:Type choices:(List (Parser (Maybe a))))          : (Parser a)
-////   (Parser.grammar a (List.nil (Parser (Maybe a))))                 = λcode (Answer.failed a ErrorMsg.TODO)
-////   (Parser.grammar a (List.cons (Parser (Maybe a)) choice choices)) = λcode (Parser.grammar.go a (choice code) choices)
+// // TODO: Finish this
+//(Parser.grammar a:Type choices:(List (Parser (Maybe a))))          : (Parser a)
+  //(Parser.grammar a (List.nil (Parser (Maybe a))))                 = λcode (Answer.failed a ErrorMsg.TODO)
+  //(Parser.grammar a (List.cons (Parser (Maybe a)) choice choices)) = λcode (Parser.grammar.go a (choice code) choices)
 
 //// (Parser.grammar.go a:Type choice_res:(Answer a) choices:(List (Parser (Maybe a)))) : (Answer a)
 ////   (Parser.grammar.go a (Answer.failed a err)                        choices) = (Answer.failed a err)

@@ -1,10 +1,19 @@
 // FIXME: File is used non-linearly many time, fixing might optimize many functions
 // FIXME: syntax error on `TF : (Not (T == F))`
 // FIXME: variables with same names are considered equal; add an unique id?
+
+// Kind2 was updated to save constructor names as strings, instead of
+// name tables. This greatly decreased code complexity, which is important now,
+// at the cost of a ~3x performance drop. This will be improved later on.
 // Rewrites for {(Nat.Destroy (Nat.Pow2 N)) == Zero}:
-// -  8404381 for N = 14
+// Before the change:
+// -  8428797 for N = 14
 // - 16338023 for N = 15
 // - 32177923 for N = 16
+// After the change:
+// - 25015316 for N = 14
+// - 49433198 for N = 15
+// - 98263309 for N = 16
 
 // #############################################################################
 // # Prelude                                                                   #
@@ -161,58 +170,6 @@ NewLine = (StrCons 10 StrNil)
 
 
 
-// Array
-// =====
-
-(Array.Empty) = (Array 0 Braun.Tip)
-
-(Array.Push (Array n t) v) = (Array (+ n 1) (Braun.Push.go (+ n 1) (& (+ n 1) 1) t v))
-  (Braun.Push.go 1 o t v)                 = (Braun.Tie Braun.Tip v Braun.Tip)
-  (Braun.Push.go n 0 (Braun.Tie l x r) v) = (Braun.Tie (Braun.Push.go (>> n 1) (& (>> n 1) 1) l v) x r)
-  (Braun.Push.go n 1 (Braun.Tie l x r) v) = (Braun.Tie l x (Braun.Push.go (>> n 1) (& (>> n 1) 1) r v))
-  (Braun.Push n t v)                      = (Braun.Push.go n (& n 1) t v)
-
-(Array.Pop (Array n t)) = (Array (- n 1) (Braun.Pop.go n (& n 1) t))
-  (Braun.Pop.go 1 o t)                 = (Braun.Tip)
-  (Braun.Pop.go n 0 (Braun.Tie l x r)) = (Braun.Tie (Braun.Pop.go (>> n 1) (& (>> n 1) 1) l) x r)
-  (Braun.Pop.go n 1 (Braun.Tie l x r)) = (Braun.Tie l x (Braun.Pop.go (>> n 1) (& (>> n 1) 1) r))
-
-(Array.Mut (Array size t) i f) = (Array.Mut.aux (< i size) i f size t)
-  (Array.Mut.aux 0 i f size t) = (Array size t)
-  (Array.Mut.aux 1 i f size t) = (Array size (Braun.Mut.go (+ i 1) f (& (+ i 1) 1) t))
-  (Braun.Mut.go 1 f o (Braun.Tie l x r)) = (Braun.Tie l (f x) r)
-  (Braun.Mut.go i f 0 (Braun.Tie l x r)) = (Braun.Tie (Braun.Mut.go (>> i 1) f (& (>> i 1) 1) l) x r)
-  (Braun.Mut.go i f 1 (Braun.Tie l x r)) = (Braun.Tie l x (Braun.Mut.go (>> i 1) f (& (>> i 1) 1) r))
-
-(Array.Set (Array size t) i v) = (Array.Mut (Array size t) i λx(v))
-
-(Array.Get (Array size t) idx) = (Array.Get.aux (< idx size) idx t)
-  (Array.Get.aux 0 idx t) = (None)
-  (Array.Get.aux 1 idx t) = (Some (Braun.Get.go (+ idx 1) (& (+ idx 1) 1) t))
-  (Braun.Get.go 1 o (Braun.Tie l x r))   = x
-  (Braun.Get.go idx 0 (Braun.Tie l x r)) = (Braun.Get.go (>> idx 1) (& (>> idx 1) 1) l)
-  (Braun.Get.go idx 1 (Braun.Tie l x r)) = (Braun.Get.go (>> idx 1) (& (>> idx 1) 1) r)
-
-(Array.Got (Array size t) idx) = (Array.Got.aux (< idx size) idx size t)
-  (Array.Got.aux 0 idx size t) = (Pair (Array size t) (None))
-  (Array.Got.aux 1 idx size t) = ((Braun.Got.go (+ idx 1) (& (+ idx 1) 1) t) λt λv (Pair (Array size t) (Some v)))
-  (Braun.Got.go 1 o (Braun.Tie l x r)) = λt (t (Braun.Tie l x r) x)
-  (Braun.Got.go i 0 (Braun.Tie l x r)) = ((Braun.Got.go (>> i 1) (& (>> i 1) 1) l) λl λv λt (t (Braun.Tie l x r) v))
-  (Braun.Got.go i 1 (Braun.Tie l x r)) = ((Braun.Got.go (>> i 1) (& (>> i 1) 1) r) λr λv λt (t (Braun.Tie l x r) v))
-
-(Array.Size (Array size tree)) = (Pair (Array size tree) size)
-
-// (Array.Range U32) : Array<U32>
-(Array.Range 0) = Array.Empty
-(Array.Range n) = (Array.Push (Array.Range (- n 1)) (- n 1))
-
-// (Array.ToList (Array a)) : (List a)
-(Array.ToList (Array size tree)) = ((Braun.ToList.Go tree) Nil)
-  (Braun.ToList.Go (Braun.Tie l x r)) = λz((Braun.ToList.Go l) (Cons x ((Braun.ToList.Go r) z)))
-  (Braun.ToList.Go Braun.Tip)         = λz(z)
-
-
-
 // Map
 // ===
 
@@ -226,13 +183,13 @@ NewLine = (StrCons 10 StrNil)
 (Len (Entry val))     = 1
 (Len (Nodes lft rgt)) = (+ (Len lft) (Len rgt))
 
-// (Get (Tree a) U32) : (Pair Tree (Maybe a))
-(Get tree key) = (Get.Go 32 tree key (λx x))
-  (Get.Go n Empty            key self)  = (Pair (self Empty) None)
-  (Get.Go n (Entry val)      key self)  = (Pair (self (Entry val)) (Some val))
-  (Get.Go n (Nodes lft rgt)  key self)  = (Get.Go.Nodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt self)
-    (Get.Go.Nodes 0 n key lft rgt self) = (Get.Go n lft key λx(self (Nodes x rgt)))
-    (Get.Go.Nodes 1 n key lft rgt self) = (Get.Go n rgt key λx(self (Nodes lft x)))
+// (Got (Tree a) U32) : (Pair Tree (Maybe a))
+(Got tree key) = (Got.Go 32 tree key (λx x))
+  (Got.Go n Empty            key self)  = (Pair (self Empty) None)
+  (Got.Go n (Entry val)      key self)  = (Pair (self (Entry val)) (Some val))
+  (Got.Go n (Nodes lft rgt)  key self)  = (Got.Go.Nodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt self)
+    (Got.Go.Nodes 0 n key lft rgt self) = (Got.Go n lft key λx(self (Nodes x rgt)))
+    (Got.Go.Nodes 1 n key lft rgt self) = (Got.Go n rgt key λx(self (Nodes lft x)))
 
 (Del tree key) = (Del.Go 32 tree key)
   (Del.Go n (Nodes lft rgt) key)  = (Del.Go.Nodes (& (>> key (- n 1)) 1) (- n 1) lft rgt key)
@@ -250,12 +207,12 @@ NewLine = (StrCons 10 StrNil)
     (Set.Go.Nodes 1 n key lft rgt val) = (Nodes lft (Set.Go n rgt key val))
 
 (Mut tree key fun) = (Mut.Go 32 tree key fun)
-  (Mut.Go 0 (Entry x)        key fun)  = (Entry (fun x))
-  (Mut.Go 0 tree             key fun)  = tree
-  (Mut.Go n Empty            key fun)  = (Mut.Go.Empty (& (>> key (- n 1)) 1) (- n 1) key fun)
+  (Mut.Go 0 (Entry x)         key fun) = (Entry (fun x))
+  (Mut.Go 0 tree              key fun) = tree
+  (Mut.Go n Empty             key fun) = (Mut.Go.Empty (& (>> key (- n 1)) 1) (- n 1) key fun)
     (Mut.Go.Empty 0 n key         fun) = (Nodes (Mut.Go n Empty key fun) Empty)
     (Mut.Go.Empty 1 n key         fun) = (Nodes Empty (Mut.Go n Empty key fun))
-  (Mut.Go n (Nodes lft rgt)  key fun)  = (Mut.Go.Nodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt fun)
+  (Mut.Go n (Nodes lft rgt)   key fun) = (Mut.Go.Nodes (& (>> key (- n 1)) 1) (- n 1) key lft rgt fun)
     (Mut.Go.Nodes 0 n key lft rgt fun) = (Nodes (Mut.Go n lft key fun) rgt)
     (Mut.Go.Nodes 1 n key lft rgt fun) = (Nodes lft (Mut.Go n rgt key fun))
 
@@ -268,6 +225,10 @@ NewLine = (StrCons 10 StrNil)
   (Map.ToList.Go (Entry val)     key) = λx (Cons (Pair key val) x)
   (Map.ToList.Go (Nodes lft rgt) key) = λx ((Map.ToList.Go lft (* key 2)) ((Map.ToList.Go rgt (+ (* key 2) 1)) x))
 
+(Map.Values val) = ((Map.Values.Go val) Nil)
+  (Map.Values.Go Empty          ) = λx x
+  (Map.Values.Go (Entry val)    ) = λx (Cons val x)
+  (Map.Values.Go (Nodes lft rgt)) = λx ((Map.Values.Go lft) ((Map.Values.Go rgt) x))
 
 
 // #############################################################################
@@ -469,17 +430,17 @@ ParseEnd = λcode (ParseEnd.Go code)
 
   (ParseVar.1 1 _ _ _ str) = (Done (Some Typ))
   (ParseVar.1 _ 1 _ _ str) = (Done (Some U32))
-  (ParseVar.1 _ _ 1 _ str) = (Done (Some (Cts str [])))
+  (ParseVar.1 _ _ 1 _ str) = (Done (Some (Cts (Name.Make str) [])))
   (ParseVar.1 _ _ _ 1 str) = (Done (Some (N32 (U32.Read str))))
   (ParseVar.1 _ _ _ _ str) = (Bind (MatchText ":") λis_ann (ParseVar.2 (If is_ann 1 _) str))
 
   (ParseVar.2 1 str) = (Bind ParseTerm λterm (Done (Some (Ann (Var (Name.Make str)) term))))
   (ParseVar.2 0 str) = (Done (Some (Var (Name.Make str))))
 
-// (ParseHol) : (Parse (Maybe Term))
-(ParseHol) = (Guard (MatchText "?")
+// (ParseGol) : (Parse (Maybe Term))
+(ParseGol) = (Guard (MatchText "?")
   (Bind ParseName λname
-  (Done (Hol name))))
+  (Done (Gol name))))
 
 // (ParseDef) : (Parser (Maybe Term))
 (ParseDef) = (Guard (MatchText "def ")
@@ -542,7 +503,7 @@ ParseEnd = λcode (ParseEnd.Go code)
   (Bind (ParseText "(")                        λskip
   (Bind ParseName                              λname
   (Bind (ParseUntil (MatchText ")") ParseTerm) λargs
-  (Done (Cts name args))))))
+  (Done (Cts (Name.Make name) args))))))
 
 // (ParseO32) : (Parser (Maybe Term)) 
 (ParseO32) = (Guard (PeekConds [λx(== x '(') λx(IsOperator x)])
@@ -564,8 +525,8 @@ ParseEnd = λcode (ParseEnd.Go code)
   (Bind (ParseUntil (MatchText (StrCons '"' StrNil)) ParseOne) λchars
   (Done (ParseStr.Make chars))))
 
-(ParseStr.Make (Cons x xs)) = (Cts "String.cons" [(N32 x) (ParseStr.Make xs)])
-(ParseStr.Make Nil)         = (Cts "String.nil" [])
+(ParseStr.Make (Cons x xs)) = (Cts (Name.Make "String.cons") [(N32 x) (ParseStr.Make xs)])
+(ParseStr.Make Nil)         = (Cts (Name.Make "String.nil") [])
 
 (ParseOper) = (Grammar [
   (Guard (MatchText "+")  (Done ADD))
@@ -618,9 +579,11 @@ ParseEnd = λcode (ParseEnd.Go code)
   (Bind ParseTerm λexpr
   (Done (Rfl expr))))
 
-// (ParseMet) : (Parser (Maybe Term))
-(ParseMet) = (Guard (MatchText "_")
-  (Done Met))
+// TODO: assign unique hashes automatically
+// (ParseHol) : (Parser (Maybe Term))
+(ParseHol) = (Guard (MatchText "_")
+  (Bind ParseName λname
+  (Done (Hol (String.Hash name)))))
 
 // (ParseTerm) : (Parser Term)
 (ParseTerm) =
@@ -639,11 +602,11 @@ ParseEnd = λcode (ParseEnd.Go code)
     ParseApp,
     ParseChr,
     ParseStr,
-    ParseHol,
+    ParseGol,
     ParseRfl,
     ParseRwt,
     ParseAnnEql,
-    ParseMet,
+    ParseHol,
     ParseVar,
   ])
 
@@ -672,7 +635,7 @@ ParseEnd = λcode (ParseEnd.Go code)
   ParseDecl)
 
 // (Term.Read File String) : Term
-(Term.Read file code) = ((Finalize (Term.Read.Got ((ParseTerm) code)) (File.GetNameTable file) 0) λntab λmets λterm term)
+(Term.Read file code) = (Term.Read.Got ((ParseTerm) code))
   (Term.Read.Got (Parsed code term)) = term
   (Term.Read.Got (Failed err))       = (Var (String.Concat "[ParseError] " err))
 
@@ -682,130 +645,45 @@ ParseEnd = λcode (ParseEnd.Go code)
   (File.Read.Got (Failed err))        = (Er (String.Concat "[ParseError] " err))
 
 
-
-// Name Table
-// ----------
-
-//type NameTable {
-  //n2i: (U32Map U32)
-  //i2n: (Array String)
-//}
-
-// (NameTable.Empty) : NameTable
-NameTable.Empty = (NameTable Empty Array.Empty)
-
-// (NameTable.NameToId NameTable String) : (Maybe U32)
-(NameTable.NameToId (NameTable n2i i2n) name) = (Pair.Get (Get n2i (String.Hash name)) λn2iλgot(got))
-
-// (NameTable.IdToName NameTable U32) : (Maybe String)
-(NameTable.IdToName (NameTable n2i i2n) id) = (Pair.Get (Array.Got i2n id) λi2nλgot(got))
-
-// Finalizes the parsing of a term.
-// - Converts every ctr name into a sequential id.
-// (Finalize NameTable Term U32) : (Tuple2 NameTable Term)
-(Finalize (Var name) ntab mets) =
-  λt (t ntab mets (Var name))
-(Finalize Met ntab mets) =
-  λt (t ntab (+ mets 1) (Met mets))
-(Finalize Typ ntab mets) =
-  λt (t ntab mets Typ)
-(Finalize U32 ntab mets) =
-  λt (t ntab mets U32)
-(Finalize (N32 numb) ntab mets) =
-  λt (t ntab mets (N32 numb))
-(Finalize (O32 oper val0 val1) ntab mets) =
-  ((Finalize val0 ntab mets) λntab λmets λval0
-  ((Finalize val1 ntab mets) λntab λmets λval1
-  λt (t ntab mets (O32 oper val0 val1))))
-(Finalize (Hol name) ntab mets) =
-  λt (t ntab mets (Hol name))
-(Finalize (Ann xval xtyp) ntab mets) =
-  ((Finalize xval ntab mets) λntab λmets λxval
-  ((Finalize xtyp ntab mets) λntab λmets λxtyp
-  λt (t ntab mets (Ann xval xtyp))))
-(Finalize (Def name expr body) ntab mets) =
-  ((Finalize expr ntab mets) λntab λmets λexpr
-  ((Finalize body ntab mets) λntab λmets λbody
-  λt (t ntab mets (Finalize.Def name expr body))))
-(Finalize (Let name expr body) ntab mets) =
-  ((Finalize expr ntab mets) λntab λmets λexpr
-  ((Finalize body ntab mets) λntab λmets λbody
-  λt (t ntab mets (Let name expr body))))
-(Finalize (All name type body) ntab mets) =
-  ((Finalize type ntab mets) λntab λmets λtype
-  ((Finalize body ntab mets) λntab λmets λbody
-  λt (t ntab mets (All name type body))))
-(Finalize (Lam name body) ntab mets) =
-  ((Finalize body ntab mets) λntab λmets λbody
-  λt (t ntab mets (Lam name body)))
-(Finalize (App func argm) ntab mets) =
-  ((Finalize func ntab mets) λntab λmets λfunc
-  ((Finalize argm ntab mets) λntab λmets λargm
-  λt (t ntab mets (App func argm))))
-(Finalize (Eql val0 val1) ntab mets) =
-  ((Finalize val0 ntab mets) λntab λmets λval0
-  ((Finalize val1 ntab mets) λntab λmets λval1
-  λt (t ntab mets (Eql val0 val1))))
-(Finalize (Rfl expr) ntab mets) =
-  ((Finalize expr ntab mets) λntab λmets λexpr
-  λt (t ntab mets (Rfl expr)))
-(Finalize (Rwt name witn goal expr) ntab mets) =
-  ((Finalize witn ntab mets) λntab λmets λwitn
-  ((Finalize goal ntab mets) λntab λmets λgoal
-  ((Finalize expr ntab mets) λntab λmets λexpr
-  λt (t ntab mets (Rwt name witn goal expr)))))
-(Finalize (Cts name args) (NameTable n2i i2n) mets) =
-  let hash = (String.Hash name)
-  (Pair.Get (Get n2i hash) λn2i λgot
-  (Finalize.Cts got name hash args (NameTable n2i i2n) mets))
-
-(Finalize.Cts None name hash args (NameTable n2i (Array size tree)) mets) =
-  let ctid = size
-  let ntab = (NameTable (Set n2i hash size) (Array.Push (Array size tree) name))
-  ((Finalize.Many args ntab mets) λntab λmets λargs
-  λt (t ntab mets (Cts ctid args)))
-(Finalize.Cts (Some ctid) name hash args ntab mets) =
-  ((Finalize.Many args ntab mets) λntab λmets λargs
-  λt (t ntab mets (Cts ctid args)))
-
-(Finalize.Many Nil ntab mets) =
-  λt (t ntab mets Nil)
-(Finalize.Many (Cons head tail) ntab mets) =
-  ((Finalize      head ntab mets) λntab λmets λhead
-  ((Finalize.Many tail ntab mets) λntab λmets λtail
-  λt (t ntab mets (Cons head tail))))
+// Post-parse helpers
+// ------------------
 
 // Used for parse-time subst (def), NOT by the evaluator/checker!
-// (Finalize.Def String Term Term) : Term
-(Finalize.Def nm val (Var name))                = (U32.If (Name.Equal name nm) val (Var name))
-(Finalize.Def nm val (Met hash))                = (Met hash)
-(Finalize.Def nm val Typ)                       = Typ
-(Finalize.Def nm val U32)                       = U32
-(Finalize.Def nm val (N32 numb))                = (N32 numb)
-(Finalize.Def nm val (O32 oper val0 val1))      = (O32 oper (Finalize.Def nm val val0) (Finalize.Def nm val val1))
-(Finalize.Def nm val (Hol name))                = (Hol name)
-(Finalize.Def nm val (Ann xval xtyp))           = (Ann (Finalize.Def nm val xval) (Finalize.Def nm val xtyp))
-(Finalize.Def nm val (Let name expr body))      = (Let name (Finalize.Def nm val expr) (Finalize.Def.Body nm val name body))
-(Finalize.Def nm val (All name type body))      = (All name (Finalize.Def nm val type) (Finalize.Def.Body nm val name body))
-(Finalize.Def nm val (Lam name body))           = (Lam name (Finalize.Def.Body nm val name body))
-(Finalize.Def nm val (App func argm))           = (App (Finalize.Def nm val func) (Finalize.Def nm val argm))
-(Finalize.Def nm val (Cts ctid args))           = (Cts ctid (Finalize.Def.Many nm val args))
+// Assumes the defined expression has no free variables.
+// (Def String Term Term) : Term
+(Def nm val (Var name))                = (U32.If (Name.Equal name nm) val (Var name))
+(Def nm val (Hol hash))                = (Hol hash)
+(Def nm val Typ)                       = Typ
+(Def nm val U32)                       = U32
+(Def nm val (N32 numb))                = (N32 numb)
+(Def nm val (O32 oper val0 val1))      = (O32 oper (Def nm val val0) (Def nm val val1))
+(Def nm val (Gol name))                = (Gol name)
+(Def nm val (Ann xval xtyp))           = (Ann (Def nm val xval) (Def nm val xtyp))
+(Def nm val (Let name expr body))      = (Let name (Def nm val expr) (Def.Body nm val name body))
+(Def nm val (All name type body))      = (All name (Def nm val type) (Def.Body nm val name body))
+(Def nm val (Lam name body))           = (Lam name (Def.Body nm val name body))
+(Def nm val (App func argm))           = (App (Def nm val func) (Def nm val argm))
+(Def nm val (Cts ctid args))           = (Cts ctid (Def.Many nm val args))
+(Def nm val (Eql val0 val1))           = (Eql (Def nm val val0) (Def nm val val1))
+(Def nm val (Rfl expr))                = (Rfl (Def nm val expr))
+(Def nm val (Rwt name witn goal expr)) = (Rwt name (Def nm val witn) (Def.Body nm val name goal) (Def nm val expr))
 
-(Finalize.Def nm val (Eql val0 val1))           = (Eql (Finalize.Def nm val val0) (Finalize.Def nm val val1))
-(Finalize.Def nm val (Rfl expr))                = (Rfl (Finalize.Def nm val expr))
-(Finalize.Def nm val (Rwt name witn goal expr)) = (Rwt name (Finalize.Def nm val witn) (Finalize.Def.Body nm val name goal) (Finalize.Def nm val expr))
+(Def.Many nm val Nil)         = Nil
+(Def.Many nm val (Cons x xs)) = (Cons (Def nm val x) (Def.Many nm val xs))
 
-(Finalize.Def.Many nm val Nil)         = Nil
-(Finalize.Def.Many nm val (Cons x xs)) = (Cons (Finalize.Def nm val x) (Finalize.Def.Many nm val xs))
+// (Def.Body String Term String Term) : Term
+(Def.Body nm val name body) = (Def.Body.Go (Name.Equal nm name) nm val body)
+  (Def.Body.Go 0 nm val body) = (Def nm val body)
+  (Def.Body.Go 1 nm val body) = body
 
-// (Finalize.Def.Body String Term String Term) : Term
-(Finalize.Def.Body nm val name body) = (Finalize.Def.Body.Go (Name.Equal nm name) nm val body)
-  (Finalize.Def.Body.Go 0 nm val body) = (Finalize.Def nm val body)
-  (Finalize.Def.Body.Go 1 nm val body) = body
+
+
+// Utils
+// -----
 
 // (Ctr.GetId Term) : U32
 (Ctr.GetId (Cts ctid args)) = ctid
-(Ctr.GetId term)            = 0
+(Ctr.GetId term)            = (Name.Make "?")
 
 (Var.GetName (Var name)) = name
 (Var.GetName x)          = (Name.Make "_")
@@ -839,8 +717,7 @@ NameTable.Empty = (NameTable Empty Array.Empty)
 // }
 
 // type File {
-//   ntab: NameTable
-//   funs: Array Func
+//   funs: Map<Func>
 // }
 
 // FIXME: this should be replaced by proper user of Maybe
@@ -854,7 +731,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (FuncAddRule (Func lty rty rules) lhs rhs) = (Func lty rty (Rule lhs rhs rules))
 
 // (Func.GetName func:Func file:File) : Func
-(Func.GetName (Func lty rty rules) file) = (Maybe.Case (File.IdToName file (Ctr.GetId lty)) "?" λx(x))
+(Func.GetName (Func lty rty rules) file) = (Name.GetString (Ctr.GetId lty))
 
 // (Func.Get func:Func ...) : ...
 (Func.Get (Func lty rty rules) cont) = (cont lty rty rules)
@@ -862,33 +739,20 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 // (Func.GetRules func:Func ...) : ...
 (Func.GetRules (Func lty rty rules)) = rules
 
-// (File.Make NameTable (List Decl)) : File
-(File.Make decls) = ((File.Make.Go NameTable.Empty decls) λntab λfuns (File ntab funs))
+// (File.Make (List Decl)) : File
+(File.Make decls) = (File (File.Make.Go decls Empty))
 
-  // (File.Make.Funcs U32) : File
-  (File.Make.Funcs 0) = Array.Empty
-  (File.Make.Funcs n) = (Array.Push (File.Make.Funcs (- n 1)) FuncEmpty)
-
-  (File.Make.Go (NameTable n2i (Array i2n.size i2n.tree)) Nil) = 
-    λt (t (NameTable n2i (Array i2n.size i2n.tree)) (File.Make.Funcs i2n.size))
-
-  (File.Make.Go (NameTable n2i i2n) (Cons (DefType lhs rhs) decls)) =
-    let ntab = (NameTable n2i i2n)
-    ((Finalize lhs ntab 0)     λntab λmets λlhs
-    ((Finalize rhs ntab 0)     λntab λmets λrhs
-    ((File.Make.Go ntab decls) λntab λfuns
+  (File.Make.Go (Cons (DefType lhs rhs) decls) file) =
     let ctid = (Ctr.GetId lhs)
-    let func = λfunc (FuncSetType func lhs rhs)
-    λt (t ntab (Array.Mut funs ctid func)))))
+    let func = (Func lhs rhs End)
+    (File.Make.Go decls (Set file (Name.GetHash ctid) func))
 
-  (File.Make.Go (NameTable n2i i2n) (Cons (DefRule lhs rhs) decls)) =
-    let ntab = (NameTable n2i i2n)
-    ((Finalize lhs ntab 0)     λntab λmets λlhs
-    ((Finalize rhs ntab 0)     λntab λmets λrhs
-    ((File.Make.Go ntab decls) λntab λfuns
+  (File.Make.Go (Cons (DefRule lhs rhs) decls) file) =
     let ctid = (Ctr.GetId lhs)
     let func = λfunc (FuncAddRule func (File.Make.LHS lhs rhs) rhs)
-    λt (t ntab (Array.Mut funs ctid func)))))
+    (File.Make.Go decls (Mut file (Name.GetHash ctid) func))
+
+  (File.Make.Go Nil file) = file
 
   // Builds the left-hand side of a rule, annotating variable usage counts.
   // TODO: use different constructor names
@@ -903,27 +767,17 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (File.Make.LHS.Many Nil         rhs) = Nil
   (File.Make.LHS.Many (Cons x xs) rhs) = (Cons (File.Make.LHS x rhs) (File.Make.LHS.Many xs rhs))
 
-
-// (File.GetNameTable File) : NameTable
-(File.GetNameTable (File ntab funs)) = ntab
-
-// (File.GetFuncs File) : (Array Func)
-(File.GetFuncs (File ntab funs)) = funs
+// (File.GetFuncs File) : (Map Func)
+(File.GetFuncs (File funs)) = funs
 
 // (File.GetFunc File U32) : (Pair File (Maybe Func))
-(File.GotFunc (File ntab funs) ctid) =
-  (Pair.Get (Array.Got funs ctid) λfuns λgot
-  (Pair (File ntab funs) got))
-
-// (File.NameToId File String) : (Maybe U32)
-(File.NameToId (File ntab funs) name) = (NameTable.NameToId ntab name)
-
-// (File.IdToName File U32) : (Maybe String)
-(File.IdToName (File ntab funs) id) = (NameTable.IdToName ntab id)
+(File.GotFunc (File funs) ctid) =
+  (Pair.Get (Got funs (Name.GetHash ctid)) λfuns λgot
+  (Pair (File funs) got))
 
 // (File.IsCtr File U32) : Bool
-(File.IsCtr (File ntab funs) ctid) =
-  (Pair.Get (Array.Got funs ctid) λfuns λgot
+(File.IsCtr (File funs) ctid) =
+  (Pair.Get (Got funs (Name.GetHash ctid)) λfuns λgot
   (Maybe.Case got 1 λfunc(File.IsCtr.Func func)))
 
   (File.IsCtr.Func (Func lty rty End))                  = 1
@@ -941,7 +795,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     λx((String.Show.Go "$")
       ((String.Show.Go (Name.GetString name))
       x))
-  (Term.Show.Go (Met hash) file) =
+  (Term.Show.Go (Hol hash) file) =
     λx((String.Show.Go "_")
       ((String.Show.Go (U32.Show hash))
       x))
@@ -978,7 +832,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       ((Term.Show.Go val1 file)
       ((String.Show.Go ")")
       x)))))))
-  (Term.Show.Go (Hol name) file) =
+  (Term.Show.Go (Gol name) file) =
     λx((String.Show.Go "?")
       ((String.Show.Go name)
       x))
@@ -1005,7 +859,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       x)))))
   (Term.Show.Go (Cts ctid args) file) =
     λx((String.Show.Go "(")
-      ((Term.Show.Go.CtrName ctid file)
+      ((String.Show.Go (Name.GetString ctid))
       ((Term.Show.Go.Cts.Args args file)
       ((String.Show.Go ")")
       x))))
@@ -1028,10 +882,6 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       ((String.Show.Go " ")
       ((Term.Show.Go expr file)
       x))))))))
-  (Term.Show.Go.CtrName id file) =
-    (Maybe.Case (File.IdToName file id)
-      (String.Show.Go (U32.Show id))
-      λname (String.Show.Go name))
   (Term.Show.Go.Cts.Args Nil file) =
     λx(x)
   (Term.Show.Go.Cts.Args (Cons arg args) file) =
@@ -1078,7 +928,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       ((Context.Show.Go rest file)
       z))))))
 
-(File.Show file) = ((File.Show.Go (Array.ToList (File.GetFuncs file)) file) "")
+(File.Show file) = ((File.Show.Go (Map.Values (File.GetFuncs file)) file) "")
   (File.Show.Go Nil file) =
     λz(z)
   (File.Show.Go (Cons (Func lhs.t lhs.r rules) funs) file) =
@@ -1118,12 +968,12 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 // (Uses String Term) : U32
 (Uses nm (Var name))                = (Name.Equal name nm)
 (Uses nm (Use name numb))           = (Name.Equal name nm)
-(Uses nm (Met hash))                = 0
+(Uses nm (Hol hash))                = 0
 (Uses nm Typ)                       = 0
 (Uses nm U32)                       = 0
 (Uses nm (N32 numb))                = 0
 (Uses nm (O32 oper val0 val1))      = (+ (Uses nm val0) (Uses nm val1))
-(Uses nm (Hol name))                = 0
+(Uses nm (Gol name))                = 0
 (Uses nm (Ann xval xtyp))           = (Uses nm xval)
 (Uses nm (Let name expr body))      = (+ (Uses nm expr) (Uses.Shadow (Name.Equal nm name) nm body))
 (Uses nm (All name type body))      = (+ (Uses nm type) (Uses.Shadow (Name.Equal nm name) nm body))
@@ -1182,8 +1032,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Trip.Get (High.Go val1 file vars) λfile λvars λval1
     (Trip file vars (HOperate oper val0 val1))))
 
-  (High.Go (Hol name) file vars) =
-    (Trip file vars (HHol name))
+  (High.Go (Gol name) file vars) =
+    (Trip file vars (HGol name))
 
   (High.Go (All name type body) file vars) =
     (Trip.Get (High.Go type file vars) λfile λvars λtype
@@ -1240,8 +1090,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (High.Go.Cts None                        term file vars) = (Trip file vars term)
   (High.Go.Cts (Some (Func lty rty rules)) term file vars) = (HFindMatchingRule rules term file vars)
 
-  (High.Go (Met hash) file vars) =
-    (Trip file vars (HMet hash))
+  (High.Go (Hol hash) file vars) =
+    (Trip file vars (HHol hash))
 
 
 // TODO: perhaps linearize term?
@@ -1263,7 +1113,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 
   (HMatches.Go (N32 x.numb) (HN32 y.numb)) = (Trip (N32 x.numb) (HN32 y.numb) (== x.numb y.numb))
 
-  (HMatches.Go (Cts x.ctid x.args) (HCts y.ctid y.args)) = (HMatches.Go.Cts (== x.ctid y.ctid) x.ctid x.args y.ctid y.args)
+  (HMatches.Go (Cts x.ctid x.args) (HCts y.ctid y.args)) = (HMatches.Go.Cts (Name.Equal x.ctid y.ctid) x.ctid x.args y.ctid y.args)
     (HMatches.Go.Cts 0 x.ctid x.args y.ctid y.args) = (Trip (Cts x.ctid x.args) (HCts y.ctid y.args) 0)
     (HMatches.Go.Cts 1 x.ctid x.args y.ctid y.args) = (HMatches.Go.Cts.Many x.args y.args 1 x.ctid y.ctid λz(z) λz(z))
       (HMatches.Go.Cts.Many Nil         Nil         m x.ctid y.ctid xs ys) = (Trip (Cts x.ctid (xs Nil)) (HCts y.ctid (ys Nil)) m)
@@ -1325,8 +1175,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Low.Go (HUse name numb) depth) =
     (Use name numb)
 
-  (Low.Go (HMet hash) depth) =
-    (Met hash)
+  (Low.Go (HHol hash) depth) =
+    (Hol hash)
 
   (Low.Go HTyp depth) =
     Typ
@@ -1342,8 +1192,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     let val1 = (Low.Go val1 depth)
     (O32 oper val0 val1)
 
-  (Low.Go (HHol name) depth) =
-    (Hol name)
+  (Low.Go (HGol name) depth) =
+    (Gol name)
 
   (Low.Go (HAll type body) depth) =
     let name = (Name.Make (StrCons (+ 97 depth) StrNil))
@@ -1419,7 +1269,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Infer.Unify file capt (Checked eqs ars typ)) = (Infer.Finish (Unify file capt eqs ars Empty) typ)
 
   (Infer.Finish (Errored err)           typ) = (Errored err)
-  (Infer.Finish (Checked eqs ars subst) typ) = (Checked eqs ars (Pair subst (Holes.Subst subst typ)))
+  (Infer.Finish (Checked eqs ars subst) typ) = (Checked eqs ars (Pair subst (Goles.Subst subst typ)))
 
   // (Infer.Go File Term Ctx (List Equation)) : (Result HTerm)
 
@@ -1430,7 +1280,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
       (Infer.Go.Found 1 name typ ctx eqs ars) = (Checked eqs ars typ)
       (Infer.Go.Found 0 name typ ctx eqs ars) = (Infer.Go.Find name ctx eqs ars)
 
-  (Infer.Go file (Met hash) ctx eqs ars) =
+  (Infer.Go file (Hol hash) ctx eqs ars) =
     (Checked eqs ars HTyp)
 
   (Infer.Go file Typ ctx eqs ars) =
@@ -1447,8 +1297,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Chain (Check.Go file val1 HU32 ctx eqs ars) λeqs λars λok
     (Checked eqs ars HU32)))
 
-  (Infer.Go file (Hol name) ctx eqs ars) =
-    (Checked eqs ars (HHol name))
+  (Infer.Go file (Gol name) ctx eqs ars) =
+    (Checked eqs ars (HGol name))
 
   (Infer.Go file (Ann xval xtyp) ctx eqs ars) =
     let htyp = (High file xtyp Nil)
@@ -1546,7 +1396,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Check.Go file (Use name numb) typ ctx eqs ext) =
     (Checked eqs (Cons (Pair name typ) ext) Unit)
 
-  (Check.Go file (Met hash) type ctx eqs ext) =
+  (Check.Go file (Hol hash) type ctx eqs ext) =
     (Checked eqs ext Unit)
 
   // FIXME: cache depth to avoid List.Length
@@ -1578,15 +1428,15 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (UnifyTest file capt 0 a b ctx eqs ext subst errs) =
     let err = λsubst (String.Flatten [
       "Type mismatch." NewLine
-      "- Expected: " (Term.Show file (Low (Holes.Subst subst a))) NewLine
-      "- Detected: " (Term.Show file (Low (Holes.Subst subst b))) NewLine
-      (Context.Show (List.Map ctx λp(Pair.MutSnd p λx(Low (Holes.Subst subst x)))) file) NewLine
+      "- Expected: " (Term.Show file (Low (Goles.Subst subst a))) NewLine
+      "- Detected: " (Term.Show file (Low (Goles.Subst subst b))) NewLine
+      (Context.Show (List.Map ctx λp(Pair.MutSnd p λx(Low (Goles.Subst subst x)))) file) NewLine
     ])
     (Unify.Go file capt eqs ext subst (Cons err errs))
   (UnifyTest file capt 1 a b ctx eqs ext subst errs) =
     (Unify.Go file capt eqs ext subst errs)
 
-// FIXME: this will loop if we subst `a_hash <- (HMet a_hash)`, since the Equal
+// FIXME: this will loop if we subst `a_hash <- (HHol a_hash)`, since the Equal
 // rewrite rule will be called repeatedly. I don't have the time to reason about
 // this right now, so I'll leave this to a future.
 // (Equal U32 HTerm HTerm U32 Subst (List Argument)) : (Trip Subst (List Argument) Bool)
@@ -1617,7 +1467,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Trip.Get (Equal file k a_val1 b_val1 depth subst ext) λsubst λext λval1_eq
   (Trip subst ext (& (== a_oper b_oper) (& val0_eq val1_eq)))))
 
-(Equal file k (HHol a_name) (HHol b_name) depth subst ext) =
+(Equal file k (HGol a_name) (HGol b_name) depth subst ext) =
   (Trip subst ext 1)
 
 (Equal file k (HAll a_type a_body) (HAll b_type b_body) depth subst ext) =
@@ -1635,7 +1485,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Trip subst ext (& func_eq argm_eq))))
 
 (Equal file k (HCts a.ctid a.args) (HCts b.ctid b.args) depth subst ext) =
-  (Equal.HCts file (Equal.Capts file k a.ctid b.ctid) (== a.ctid b.ctid) (HCts a.ctid a.args) (HCts b.ctid b.args) depth subst ext)
+  (Equal.HCts file (Equal.Capts file k a.ctid b.ctid) (Name.Equal a.ctid b.ctid) (HCts a.ctid a.args) (HCts b.ctid b.args) depth subst ext)
 
   (Equal.HCts file 0 0 a                    b                    depth subst ext) = (Trip subst ext 0)
   (Equal.HCts file 1 0 a                    b                    depth subst ext) = (Capt file a b subst ext)
@@ -1652,14 +1502,14 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Trip.Get (Equal file k a_expr b_expr depth subst ext) λsubst λext λexpr_eq
   (Tri subst ext (& witn_eq (& body_eq expr_eq))))))
 
-(Equal file k (HMet a_hash) (HMet b_hash) depth subst ext) =
+(Equal file k (HHol a_hash) (HHol b_hash) depth subst ext) =
   (Trip subst ext 1)
 
-(Equal file k (HMet a_hash) b depth subst ext) = (Pair.Get (Get subst a_hash) λsubst λgot_a (Equal.Got.0 file k a_hash got_a b depth subst ext))
+(Equal file k (HHol a_hash) b depth subst ext) = (Pair.Get (Got subst a_hash) λsubst λgot_a (Equal.Got.0 file k a_hash got_a b depth subst ext))
   (Equal.Got.0 file k a_hash None     b depth subst ext) = (Trip (Set subst a_hash b) ext 1)
   (Equal.Got.0 file k a_hash (Some a) b depth subst ext) = (Equal file k a b depth subst ext)
 
-(Equal file k a (HMet b_hash) depth subst ext) = (Pair.Get (Get subst b_hash) λsubst λgot_b (Equal.Got.1 file k b_hash a got_b depth subst ext))
+(Equal file k a (HHol b_hash) depth subst ext) = (Pair.Get (Got subst b_hash) λsubst λgot_b (Equal.Got.1 file k b_hash a got_b depth subst ext))
   (Equal.Got.1 file k b_hash a None     depth subst ext) = (Trip (Set subst b_hash a) ext 1)
   (Equal.Got.1 file k b_hash a (Some b) depth subst ext) = (Equal file k a b depth subst ext)
 
@@ -1693,7 +1543,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Holes.Subst subst HU32)                       = HU32
 (Holes.Subst subst (HN32 numb))                = (HN32 numb)
 (Holes.Subst subst (HO32 oper val0 val1))      = (HO32 oper (Holes.Subst subst val0) (Holes.Subst subst val1))
-(Holes.Subst subst (HHol name))                = (HHol name)
+(Holes.Subst subst (HGol name))                = (HGol name)
 (Holes.Subst subst (HAnn xval xtyp))           = (HAnn (Holes.Subst subst xval) (Holes.Subst subst xtyp))
 (Holes.Subst subst (HLet expr body))           = (HLet (Holes.Subst subst expr) λx(Holes.Subst subst (body x)))
 (Holes.Subst subst (HAll type body))           = (HAll (Holes.Subst subst type) λx(Holes.Subst subst (body x)))
@@ -1703,8 +1553,8 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Holes.Subst subst (HEql val0 val1))           = (HEql (Holes.Subst subst val0) (Holes.Subst subst val1))
 (Holes.Subst subst (HRfl expr))                = (HRfl (Holes.Subst subst expr))
 (Holes.Subst subst (HRwt name witn goal expr)) = (HRwt name (Holes.Subst subst witn) λx(Holes.Subst subst (goal x)) (Holes.Subst subst expr))
-(Holes.Subst subst (HMet hash))                = (Pair.Get (Get subst hash) λsubst λgot (HolesGot.Subst subst hash got))
-  (HolesGot.Subst subst hash None)             = (HMet hash)
+(Holes.Subst subst (HHol hash))                = (Pair.Get (Got subst hash) λsubst λgot (HolesGot.Subst subst hash got))
+  (HolesGot.Subst subst hash None)             = (HHol hash)
   (HolesGot.Subst subst hash (Some x))         = (Holes.Subst subst x)
 
 // (Holes.Count Term) : U32
@@ -1715,7 +1565,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Holes.Count U32)                       = 0
 (Holes.Count (N32 numb))                = 0
 (Holes.Count (O32 oper val0 val1))      = (+ (Holes.Count val0) (Holes.Count val1))
-(Holes.Count (Hol name))                = 0
+(Holes.Count (Gol name))                = 0
 (Holes.Count (Ann xval xtyp))           = (+ (Holes.Count xval) (Holes.Count xtyp))
 (Holes.Count (Let name expr body))      = (+ (Holes.Count expr) (Holes.Count body))
 (Holes.Count (All name type body))      = (+ (Holes.Count type) (Holes.Count body))
@@ -1725,13 +1575,13 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Holes.Count (Eql val0 val1))           = (+ (Holes.Count val0) (Holes.Count val1))
 (Holes.Count (Rfl expr))                = (Holes.Count expr)
 (Holes.Count (Rwt name witn goal expr)) = (+ (Holes.Count witn) (+ (Holes.Count goal) (Holes.Count expr)))
-(Holes.Count (Met hash))                = 1
+(Holes.Count (Hol hash))                = 1
 
 (Holes.Count.Many Nil)         = 0
 (Holes.Count.Many (Cons x xs)) = (+ (Holes.Count x) (Holes.Count.Many xs))
 
 // (Verify.File File) : String
-(Verify.File file) = (Verify.Funcs file (Array.ToList (File.GetFuncs file)))
+(Verify.File file) = (Verify.Funcs file (Map.Values (File.GetFuncs file)))
 
 // (Verify.Funcs File (List Func)) : String
 (Verify.Funcs file Nil) = StrNil
@@ -1778,7 +1628,7 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
 (Verify.Rule file (Cts typ.ctid typ.args) r.typ (Cts val.ctid val.args) r.val) =
   (Verify.Rule.List file typ.args r.typ val.args r.val)
 (Verify.Rule file a.typ r.typ a.val r.val) =
-  let rule_name = (Maybe.Case (File.IdToName file (Ctr.GetId a.val)) "?" λx(x))
+  let rule_name = (Name.GetString (Ctr.GetId a.val))
   (Errored (String.Flatten [
     "Mistyped rule: " rule_name NewLine NewLine 
   ]))
@@ -1918,21 +1768,19 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
     (Nat.BFT (Succ Zero))     = refl (Succ Zero)
     (Nat.BFT (Succ (Succ n))) =
       let e0 = (Nat.BFT n)
-      let e1 = (Cong _ _ _ _ λx(Succ x) e0)
-      let e2 = (Cong _ _ _ _ λx(Succ x) e1)
+      let e1 = (Cong _0 _1 _2 _3 λx(Succ x) e0)
+      let e2 = (Cong _4 _5 _6 _7 λx(Succ x) e1)
       e2
 
   Foo : Nat
     Foo = (Nat.Destroy (Nat.Pow2
+      (Succ (Succ
       (Succ (Succ (Succ (Succ (Succ (Succ (Succ
       (Succ (Succ (Succ (Succ (Succ (Succ (Succ
-      Zero))))))))))))))))
+      Zero))))))))))))))))))
 
-  //Main : {Foo == Zero}
-    //Main = refl Zero
-
-  Main : U32
-    Main = "test"
+  Main : {Foo == Zero}
+    Main = refl Zero
 `
 
 (Kind2.Check code) = (Kind2.Check.Go (File.Read code))
@@ -1943,5 +1791,5 @@ FuncEmpty = (Func (Var (Name.Make "?")) (Var (Name.Make "?")) End)
   (Kind2.Run.Go (Er err)  expr) = err
   (Kind2.Run.Go (Ok file) expr) = (Term.Show file (Normal file (Term.Read file expr)))
 
-//(Main n) = (Kind2.Check Test.0)
-(Main n) = (Kind2.Run Test.0)
+(Main n) = (Kind2.Check Test.0)
+//(Main n) = (Kind2.Run Test.0)

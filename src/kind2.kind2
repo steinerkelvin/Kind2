@@ -16,6 +16,15 @@
   (U32.not 0) = 1
   (U32.not 1) = 0
 
+(U32.read str:String) : U32
+  (U32.read str) = (U32.read.go str 0)
+
+(U32.read.go str:String r:U32) : U32
+  (U32.read.go StrNil         r) = r
+  // TODO: with string sugar
+  // (U32.read.go (StrCons x xs) r) = (U32.if U32 (& (<= '0' x) (<= x '9')) (U32.read.go xs (+ (* r 10) (- x '0'))) 0) 
+  (U32.read.go (StrCons x xs) r) = (U32.if U32 (& (<= 48 x) (<= x 57)) (U32.read.go xs (+ (* r 10) (- x 48))) 0)
+
 // Unit
 // ====
 

@@ -582,3 +582,48 @@ TodoMsg.TODO : String
   (Parser.guard.go a (Answer.failed Bool err)             body) = (Answer.failed (Maybe a) err)
   (Parser.guard.go a (Answer.parsed Bool code Bool.false) body) = (Answer.parsed (Maybe a) code (Maybe.none a))
   (Parser.guard.go a (Answer.parsed Bool code Bool.true)  body) = ((Parser.bind a (Maybe a) body λgot (Parser.done _ (Maybe.some a got))) code)
+
+// #############################################################################
+// # Kind2                                                                     #
+// #############################################################################
+
+
+// Parsing
+// -------
+
+Op : Type 
+ Op.ADD : Op
+ Op.SUB : Op
+ Op.MUL : Op
+ Op.DIV : Op
+ Op.MOD : Op
+ Op.AND : Op
+ Op.OR  : Op
+ Op.XOR : Op
+ Op.SHL : Op
+ Op.SHR : Op
+ Op.LTE : Op
+ Op.LTN : Op
+ Op.EQL : Op
+ Op.GTE : Op
+ Op.GTN : Op
+ Op.NEQ : Op
+
+Term : Type
+  (Term.def name:String expr:Term body:Term)           : Term
+  (Term.let name:String expr:Term body:Term)           : Term
+  (Term.cts name:String list:(List Term))              : Term
+  (Term.o32 op:Op val0:Term val1:Term)                 : Term
+  (Term.lam name:String body:Term)                     : Term
+  (Term.app f:Term x:Term)                             : Term
+  (Term.var name:String)                               : Term
+  (Term.n32 value:U32)                                 : Term
+  (Term.u32)                                           : Term
+  (Term.all name:String type:Term body:Term)           : Term
+  (Term.gol name:String)                               : Term
+  (Term.typ)                                           : Term
+  (Term.ann expr:String type:Term)                     : Term
+  (Term.hol hash:String)                               : Term     
+  (Term.eql val0:Term val1:Term)                       : Term
+  (Term.rwt name:String witn:Term goal:Term expr:Term) : Term
+

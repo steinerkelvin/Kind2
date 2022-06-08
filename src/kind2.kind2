@@ -604,11 +604,15 @@ Text.Question : String
   (Parser.bind String Term (Parser.parse_name) λname
   (Parser.done Term (Term.gol (Name.make name)))))
 
-(ParseTerm) : (Parser Term)
-  // (ParseTerm) = TODO
+// FIXME: or better INFER ME
+// (Parser.parse_term) : (Parser Term)
+//   (Parser.parse_term) =
+//     (Parser.bind _ _ ((Parser.parse_term.ini) λini
+//     (Parser.bind _ _ ((Parser.parse_term.end) λend
+//     (Parser.done _ (end ini))))))
 
-(ParseTerm.ini) : (Parser Term)
-(ParseTerm.ini) =
+(Parser.parse_term.ini) : (Parser Term)
+(Parser.parse_term.ini) =
   (Parser.grammar Term (List.cons (Parser (Maybe Term)) Parser.parse_hol
                        (List.cons (Parser (Maybe Term)) Parser.parse_gol
                        (List.nil  (Parser (Maybe Term))))))
@@ -632,8 +636,8 @@ Text.Question : String
 // //                        (List.cons (Parser (Maybe Term)) Parse.var
 // //                        (List.nil  (Parser (Maybe Term)))))))))))))))))))
 
-(ParseTerm.end) : (Parser ∀(x:Term)Term)
-(ParseTerm.end) =
+(Parser.parse_term.end) : (Parser ∀(x:Term)Term)
+(Parser.parse_term.end) =
   let xs = (List.cons (Parser (Maybe ∀(x:Term)Term)) (Parser.done (Maybe ∀(x:Term)Term) (Maybe.some ∀(x:Term)Term λx(x))) 
            (List.nil (Parser (Maybe ∀(x:Term)Term))))
 

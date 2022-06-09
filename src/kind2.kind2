@@ -600,6 +600,9 @@ Text.Def : String
 Text.Eql : String
   Text.Eql = (StrCons 61 StrNil)
 
+Text.Single_quotes : String
+  Text.Single_quotes = (StrCons 39 StrNil)
+
 
 // (Parser.parse_var) : (Parser (Maybe Term))
 //   (Parser.parse_var) = (Parser.bind String (Maybe Term) (Parser.parse_name) λname (Parser.parse_var.0 name))
@@ -652,7 +655,6 @@ Text.Eql : String
   (Parser.bind Term Term (Parser.parse_term)             λbody
   (Parser.done Term (Term.all (Name.make name) type body)))))))))
 
-
 (Parser.parse_rwt) : (Parser (Maybe Term))
 (Parser.parse_rwt) = (Parser.guard Term (Parser.match_text Text.Rewrite)
   (Parser.bind String Term (Parser.parse_name)         λname
@@ -667,6 +669,24 @@ Text.Eql : String
 (Parser.parse_rfl) = (Parser.guard Term (Parser.match_text Text.Refl)
   (Parser.bind Term Term (Parser.parse_term) λexpr
   (Parser.done Term (Term.rfl expr))))
+
+(Parser.parse_chr) : (Parser (Maybe Term))
+(Parser.parse_chr) = (Parser.guard Term (Parser.match_text Text.Single_quotes)
+  (Parser.bind U32 Term (Parser.parse_one)             λchr
+  (Parser.bind Unit Term (Parser.parse_text Text.With) λskip
+  (Parser.done Term (Term.n32 chr)))))
+
+// (Parser.parse_cts) : (Parser (Maybe Term))
+// (Parser.parse_cts) = (Parser.guard Term (Parser.peek_conds (List.cons ∀(x:Char)U32 λx(== x Text.LParen) 
+//                                                            (List.cons ∀(x:Char)U32 λx(Char.is_upper x)
+//                                                            (List.nil ∀(x:Char)U32))))
+//                      (Parser.bind Unit Term (Parser.parse_text Text.LParen) λskip
+//                      (Parser.bind String Term (Parser.parse_name)                                                           λname
+//                      (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text Text.RParen) Parser.parse_term) λargs
+//                      (Parser.done Term (Term.cts (Name.make name) args))))))
+// (Parser.parse_until a:Type stop:(Parser Bool) parser:(Parser a)) : (Parser (List a))
+
+
 
 // (Parser.bind a:Type b:Type a_parser:(Parser a) f:(∀(x:a)(Parser b))): (Parser b)
 

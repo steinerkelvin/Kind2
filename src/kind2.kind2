@@ -606,14 +606,88 @@ Text.Eql : String
 Text.Plus : String
   Text.Plus = (StrCons 43 StrNil)
 
+Text.Sub : String
+  Text.Sub = (StrCons 45 StrNil)
+
+Text.Mul : String
+  Text.Mul = (StrCons 42 StrNil)
+
+Text.Div : String
+  Text.Div = (StrCons 47 StrNil)
+
+Text.Mod : String
+  Text.Mod = (StrCons 37 StrNil)
+
+Text.And : String
+  Text.And = (StrCons 38 StrNil)
+
+Text.Or : String
+  Text.Or = (StrCons 124 StrNil)
+
+Text.Xor : String
+  Text.Xor = (StrCons 94 StrNil)
+
+Text.Shl : String
+  Text.Shl = (StrCons 60 (StrCons 60 StrNil))
+
+Text.Shr : String
+  Text.Shr = (StrCons 62 (StrCons 62 StrNil))
+
+Text.Lte : String
+  Text.Lte = (StrCons 60 (StrCons 61 StrNil))
+
+Text.Ltn : String
+  Text.Ltn = (StrCons 60 StrNil)
+
+Text.Gte : String
+  Text.Gte = (StrCons 62 (StrCons 61 StrNil))
+
+Text.Gtn : String
+  Text.Gtn = (StrCons 62 StrNil)
+
+Text.Neq : String
+  Text.Neq = (StrCons 33 (StrCons 61 StrNil))
+
 Text.Single_quotes : String
   Text.Single_quotes = (StrCons 39 StrNil)
+
+Text.LBrace : String
+  Text.LBrace = (StrCons 123 StrNil)
+
+Text.RBrace : String
+  Text.RBrace = (StrCons 125 StrNil)
+
+Text.DColon : String
+  Text.DColon = (StrCons 58 (StrCons 58 StrNil))
+
+Text.DEql : String
+  Text.DEql = (StrCons 61 (StrCons 61 StrNil))
+
+Text.Quote : String
+  Text.Quote = (StrCons 34 StrNil)
+
+
 
 // TODO: complete
 (Parser.parse_oper) : (Parser Op)
   (Parser.parse_oper) =
     (Parser.grammar Op (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Plus) (Parser.done Op Op.ADD))
-                       (List.nil (Parser (Maybe Op)))))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Sub)  (Parser.done Op Op.SUB))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Mul)  (Parser.done Op Op.MUL))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Div)  (Parser.done Op Op.DIV))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Mod)  (Parser.done Op Op.MOD))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.And)  (Parser.done Op Op.AND))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Or)   (Parser.done Op Op.OR))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Xor)  (Parser.done Op Op.XOR))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Shl)  (Parser.done Op Op.SHL))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Shr)  (Parser.done Op Op.SHR))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Lte)  (Parser.done Op Op.LTE))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Ltn)  (Parser.done Op Op.LTN))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.DEql) (Parser.done Op Op.EQL))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Gte)  (Parser.done Op Op.GTE))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Gtn)  (Parser.done Op Op.GTN))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Neq)  (Parser.done Op Op.NEQ))
+                       (List.nil (Parser (Maybe Op))))))))))))))))))))
 
 (Parser.parse_var) : (Parser (Maybe Term))
   (Parser.parse_var) = (Parser.bind String (Maybe Term) (Parser.parse_name) λname (Parser.parse_var.0 name))
@@ -662,6 +736,10 @@ Text.Single_quotes : String
     (Parser.done Term (Term.let (Name.make name) expr body)))))
 
 (Parser.parse_def) : (Parser (Maybe Term))
+(Parser.parse_def) = (Parser.guard Term (Parser.match_text Text.Def)
+  (Parser.bind String Term (Parser.parse_name)          λname
+  (Parser.bind Bool Term (Parser.match_text Text.Colon) λanns
+  (Parser.parse_def_ann anns name))))
 
 (Parser.parse_def_ann b:Bool name:String) : (Parser Term)
   (Parser.parse_def_ann Bool.true name) =
@@ -743,6 +821,39 @@ Text.Single_quotes : String
     (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text Text.RParen) Parser.parse_term) λargs
     (Parser.done Term (Term.cts (Name.make name) args))))))
 
+(Parser.parse_ann_eql) : (Parser (Maybe Term))
+(Parser.parse_ann_eql) = (Parser.guard Term (Parser.match_text Text.LBrace)
+  (Parser.bind Term Term (Parser.parse_term)             λval0
+  (Parser.bind Bool Term (Parser.match_text Text.DColon) λanns
+  (Parser.parse_ann_eql_go anns val0))))
+
+(Parser.parse_ann_eql_go b:Bool val0:Term) : (Parser Term)
+  (Parser.parse_ann_eql_go Bool.true val0) =
+    (Parser.bind Term Term (Parser.parse_term)             λval1
+    (Parser.bind Unit Term (Parser.parse_text Text.RBrace) λskip
+    (Parser.done Term (Term.ann val0 val1))))
+  (Parser.parse_ann_eql_go Bool.false val0) =
+    (Parser.bind Unit Term (Parser.parse_text Text.DEql) λskip
+    (Parser.bind Term Term (Parser.parse_term)             λval1
+    (Parser.bind Unit Term (Parser.parse_text Text.RBrace) λskip
+    (Parser.done Term (Term.eql val0 val1)))))
+
+(Parser.parse_app) : (Parser (Maybe Term))
+(Parser.parse_app) = (Parser.guard Term (Parser.match_text Text.LParen)
+  (Parser.bind Term Term (Parser.parse_term)                                                                λfunc
+  (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text Text.RParen) Parser.parse_term) λargs
+  (Parser.done Term ((List.fold Term ∀(a:Term)Term args λx(x) λxλtλf(t (Term.app f x))) func)))))
+
+// (Parser.parse_str) : (Parser (Maybe Term))
+// (Parser.parse_str) = (Parser.guard Term (Parser.match_text Text.Quote)
+//   (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text Text.Quote) Parser.parse_one) λchars
+//   (Parser.done Term (Parser.parse_str_make chars))))
+
+// (Parser.parse_str_make (List Term)) : Term
+// (Parser.parse_str_make (List.cons x xs) = (Term.cts (Name.make StrCons) (List.cons (N32 x) (Parser.parse_str_make xs))))
+// (Parser.parse_str_make List.nil) = (Term.cts (Name.make StrNil) List.nil)
+
+
 // FIXME: or better INFER ME
 (Parser.parse_term) : (Parser Term)
 //   (Parser.parse_term) =
@@ -758,16 +869,16 @@ Text.Single_quotes : String
                        (List.cons (Parser (Maybe Term)) Parser.parse_o32
                        (List.cons (Parser (Maybe Term)) Parser.parse_all
                        (List.cons (Parser (Maybe Term)) Parser.parse_lam
-                       // (List.cons (Parser (Maybe Term)) Parser.parse_app
+                       (List.cons (Parser (Maybe Term)) Parser.parse_app
                        (List.cons (Parser (Maybe Term)) Parser.parse_chr
                        // (List.cons (Parser (Maybe Term)) Parser.parse_str
                        (List.cons (Parser (Maybe Term)) Parser.parse_gol
                        (List.cons (Parser (Maybe Term)) Parser.parse_rfl
                        (List.cons (Parser (Maybe Term)) Parser.parse_rwt
-                       // (List.cons (Parser (Maybe Term)) Parser.parse_ann_eql
+                       (List.cons (Parser (Maybe Term)) Parser.parse_ann_eql
                        (List.cons (Parser (Maybe Term)) Parser.parse_hol
                        (List.cons (Parser (Maybe Term)) Parser.parse_var
-                       (List.nil  (Parser (Maybe Term))))))))))))))))
+                       (List.nil  (Parser (Maybe Term))))))))))))))))))
 
 (Parser.parse_term.end) : (Parser ∀(x:Term)Term)
 (Parser.parse_term.end) =

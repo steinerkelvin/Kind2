@@ -16,6 +16,15 @@
   (U32.not 0) = 1
   (U32.not 1) = 0
 
+(U32.read str:String) : U32
+  (U32.read str) = (U32.read.go str 0)
+
+(U32.read.go str:String r:U32) : U32
+  (U32.read.go StrNil         r) = r
+  // TODO: with string sugar
+  // (U32.read.go (StrCons x xs) r) = (U32.if U32 (& (<= '0' x) (<= x '9')) (U32.read.go xs (+ (* r 10) (- x '0'))) 0) 
+  (U32.read.go (StrCons x xs) r) = (U32.if U32 (& (<= 48 x) (<= x 57)) (U32.read.go xs (+ (* r 10) (- x 48))) 0)
+
 // Unit
 // ====
 
@@ -127,6 +136,25 @@ Bool: Type
 (List.to_map.go a:Type list:(List (Pair U32 a)) map:(Map a)) : (Map a)
   (List.to_map.go a (List.nil (Pair U32 a))                              map) = map
   (List.to_map.go a (List.cons (Pair U32 a) (Pair.new U32 a key val) xs) map) = (List.to_map.go a xs (Map.set a map key val))
+
+// Name
+// ====
+
+Name : Type
+  (Name.new str:String hash:U32) : Name
+
+(Name.make str:String) : Name
+  (Name.make str) = (Name.new str (String.hash str))
+
+(Name.get_hash name:Name) : U32
+  (Name.get_hash (Name.new str hash)) = hash
+
+(Name.get_string name:Name) : String
+  (Name.get_string (Name.new str hash)) = str
+  (Name.get_string (Name.new str hash)) = (String.concat TodoMsg.TODO str)
+
+(Name.equal a_name:Name b_name:Name) : U32
+  (Name.equal (Name.new a_str a_hash) (Name.new b_str b_hash)) = (== a_hash b_hash)
 
 // String
 // ======
@@ -274,94 +302,13 @@ String : Type
   (Map.to_list.go a (Map.nodes a lft rgt) key) = λx
     ((Map.to_list.go a lft (* key 2)) ((Map.to_list.go a rgt (+ (* key 2) 1)) x))
 
-// Braun Tree
-// ==========
+(Map.values a:Type val:(Map a)) : (List a)
+  (Map.values a val) = ((Map.values.go a val) (List.nil a))
 
-(Braun t:Type): Type
-  (Braun.tip t:Type): (Braun t) 
-  (Braun.tie t:Type left: (Braun t) mid: t right: (Braun t)) : (Braun t)
-
-(Braun.empty a:Type) : (Braun a)
-  (Braun.empty a) = (Braun.tip a)
-
-(Braun.push t:Type n:U32 o:U32 tree:(Braun t) value: t) : (Braun t)
-  (Braun.push t 1 o tree value) = (Braun.tie t (Braun.tip t) value (Braun.tip t))
-  (Braun.push t n 0 (Braun.tie t l x r) v) = (Braun.tie t (Braun.push t (>> n 1) (& (>> n 1) 1) l v) x r)
-  (Braun.push t n 1 (Braun.tie t l x r) v) = (Braun.tie t l x (Braun.push t (>> n 1) (& (>> n 1) 1) r v))
-
-(Braun.pop t:Type n:U32 o:U32 tree:(Braun t)) : (Braun t)
-  (Braun.pop t 1 o tree) = (Braun.tip t)
-  (Braun.pop t n 0 (Braun.tie t l x r)) = (Braun.tie t (Braun.pop t (>> n 1) (& (>> n 1) 1) l) x r)
-  (Braun.pop t n 1 (Braun.tie t l x r)) = (Braun.tie t l x (Braun.pop t (>> n 1) (& (>> n 1) 1) r))
-
-(Braun.mut t:Type i:U32 f:(∀(x:t)t) o:U32 tree:(Braun t)) : (Braun t)
-  (Braun.mut t 1 f o (Braun.tie t l x r)) = (Braun.tie t l (f x) r)
-  (Braun.mut t i f 0 (Braun.tie t l x r)) = (Braun.tie t (Braun.mut t (>> i 1) f (& (>> i 1) 1) l) x r)
-  (Braun.mut t i f 1 (Braun.tie t l x r)) = (Braun.tie t l x (Braun.mut t (>> i 1) f (& (>> i 1) 1) r))
-
-(Braun.get t:Type idx: U32 o: U32 tree:(Braun t)) : t
-  (Braun.get t 1 o (Braun.tie t l x r))   = x
-  (Braun.get t idx 0 (Braun.tie t l x r)) = (Braun.get t (>> idx 1) (& (>> idx 1) 1) l)
-  (Braun.get t idx 1 (Braun.tie t l x r)) = (Braun.get t (>> idx 1) (& (>> idx 1) 1) r)
-
-(Braun.got a:Type idx: U32 o:U32 tree:(Braun a)) : (Tuple2 (Braun a) a)
-  (Braun.got t 1 o (Braun.tie t lft x rgt)) =
-    λp λnew (new (Braun.tie t lft x rgt) x)
-  (Braun.got u i 0 (Braun.tie u lft x rgt)) =
-    let lft = (Braun.got u (>> i 1) (& (>> i 1) 1) lft)
-    (lft (Tuple2 (Braun u) u) λlft λgot
-      λp λnew (new (Braun.tie u lft x rgt) got))
-
-(Braun.to_list t:Type tree:(Braun t)) : ∀(x:(List t)) (List t)
-  (Braun.to_list t (Braun.tie t l x r)) = λz((Braun.to_list t l) (List.cons t x ((Braun.to_list t r) z)))
-  (Braun.to_list t (Braun.tip t))       = λz(z)
-
-// Array
-// =====
-
-(Array t:Type): Type
-  (Array.new t:Type size:U32 tree:(Braun t)): (Array t)
-
-(Array.empty t:Type) : (Array t)
-  (Array.empty t) = (Array.new t 0 (Braun.empty t))
-
-(Array.push t:Type arr:(Array t) value: t) : (Array t)
-  (Array.push t (Array.new t n tree) v) = (Array.new t (+ n 1) (Braun.push t (+ n 1) (& (+ n 1) 1) tree v))
-
-(Array.pop t:Type arr:(Array t)) : (Array t)
-  (Array.pop t (Array.new t n tree)) = (Array.new t (- n 1) (Braun.pop t n (& n 1) tree))
-
-(Array.mut t:Type arr:(Array t) i:U32 f:(∀(x:t)t)) : (Array t)
-  (Array.mut t (Array.new t size tree) i f) = (Array.mut.aux t (< i size) i f size tree)
-(Array.mut.aux t:Type cond:U32 i:U32 f:(∀(x:t)t) size:U32 tree:(Braun t)): (Array t)
-  (Array.mut.aux t 0 i f size tree) = (Array.new t size tree)
-  (Array.mut.aux t 1 i f size tree) = (Array.new t size (Braun.mut t (+ i 1) f (& (+ i 1) 1) tree))
-
-(Array.set t:Type arr:(Array t) i:U32 value:t) : (Array t)
-  (Array.set t (Array.new t size tree) i value) = (Array.mut t (Array.new t size tree) i λx(value))
-
-(Array.get t:Type arr:(Array t) i:U32) : (Maybe t)
-  (Array.get t (Array.new t size tree) idx) = (Array.get.aux t (< idx size) idx tree)
-(Array.get.aux t:Type cond:U32 idx:U32 tree:(Braun t)) : (Maybe t)
-  (Array.get.aux t 0 idx tree) = (Maybe.none t)
-  (Array.get.aux t 1 idx tree) = (Maybe.some t (Braun.get t (+ idx 1) (& (+ idx 1) 1) tree))
-
-(Array.got t:Type arr:(Array t) idx: U32) : (Pair (Array t) (Maybe t))
-  (Array.got t (Array.new t size tree) idx) = (Array.got.aux t (< idx size) idx size tree)
-
-(Array.got.aux t:Type cond:U32 idx:U32 size:U32 tree:(Braun t)) : (Pair (Array t) (Maybe t))
-  (Array.got.aux t 0 idx size tree) = (Pair.new (Array t) (Maybe t) (Array.new t size tree) (Maybe.none t))
-  (Array.got.aux t 1 idx size tree) =
-    let tup = (Braun.got t (+ idx 1) (& (+ idx 1) 1) tree)
-    let ret = (tup _ λtree λval (Pair.new _ _ (Array.new t size tree) (Maybe.some t val)))
-    ret
-
-(Array.range range:U32) : (Array U32)
-  (Array.range 0) = (Array.empty U32)
-  (Array.range n) = (Array.push U32 (Array.range (- n 1)) (- n 1))
-
-(Array.to_list t:Type (Array t)) : (List t)
-  (Array.to_list t (Array.new t size tree)) = ((Braun.to_list t tree) (List.nil t))
+(Map.values.go a:Type val:(Map a)) : ∀(x:(List a))(List a)
+  (Map.values.go a (Map.empty a)        ) = λx x
+  (Map.values.go a (Map.entry a val    )) = λx (List.cons a val x)
+  (Map.values.go a (Map.nodes a lft rgt)) = λx ((Map.values.go a lft) ((Map.values.go a rgt) x))
 
 // Parser
 // ======
@@ -506,7 +453,7 @@ TodoMsg.TODO : String
   (Parser.skipper StrNil)         = StrNil
   (Parser.skipper (StrCons x xs)) = (Parser.skipper.go (Char.is_space x) (== x 47) x xs)
 
-(Parser.skipper.go isSpace:U32 isSlash:U32 x:Char xs:String): String
+(Parser.skipper.go is_space:U32 is_slash:U32 x:Char xs:String): String
   (Parser.skipper.go 0 0 x xs) = (StrCons x xs)
   (Parser.skipper.go 1 c x xs) = (Parser.skipper xs)
   (Parser.skipper.go s 1 x xs) = (Parser.skipper.drop_comment xs)
@@ -515,7 +462,7 @@ TodoMsg.TODO : String
   (Parser.skipper.drop_comment StrNil)         = StrNil
   (Parser.skipper.drop_comment (StrCons x xs)) = (Parser.skipper.drop_comment.go (== x 10) x xs) 
 
-(Parser.skipper.drop_comment.go isSpace:U32 x:Char xs:String): String
+(Parser.skipper.drop_comment.go is_space:U32 x:Char xs:String): String
   (Parser.skipper.drop_comment.go 1 x xs) = (Parser.skipper xs)
   (Parser.skipper.drop_comment.go 0 x xs) = (Parser.skipper.drop_comment xs)
 
@@ -563,3 +510,379 @@ TodoMsg.TODO : String
   (Parser.guard.go a (Answer.failed Bool err)             body) = (Answer.failed (Maybe a) err)
   (Parser.guard.go a (Answer.parsed Bool code Bool.false) body) = (Answer.parsed (Maybe a) code (Maybe.none a))
   (Parser.guard.go a (Answer.parsed Bool code Bool.true)  body) = ((Parser.bind a (Maybe a) body λgot (Parser.done _ (Maybe.some a got))) code)
+
+// #############################################################################
+// # Kind2                                                                     #
+// #############################################################################
+
+
+// Parsing
+// -------
+
+Op : Type 
+ Op.ADD : Op
+ Op.SUB : Op
+ Op.MUL : Op
+ Op.DIV : Op
+ Op.MOD : Op
+ Op.AND : Op
+ Op.OR  : Op
+ Op.XOR : Op
+ Op.SHL : Op
+ Op.SHR : Op
+ Op.LTE : Op
+ Op.LTN : Op
+ Op.EQL : Op
+ Op.GTE : Op
+ Op.GTN : Op
+ Op.NEQ : Op
+
+Term : Type
+  (Term.def name:Name expr:Term body:Term)           : Term
+  (Term.let name:Name expr:Term body:Term)           : Term
+  (Term.cts name:Name list:(List Term))              : Term
+  (Term.o32 op:Op val0:Term val1:Term)               : Term
+  (Term.lam name:Name body:Term)                     : Term
+  (Term.rfl expr:Term)                               : Term
+  (Term.app f:Term x:Term)                           : Term
+  (Term.var name:Name)                               : Term
+  (Term.n32 value:U32)                               : Term
+  (Term.u32)                                         : Term
+  (Term.all name:Name type:Term body:Term)           : Term
+  (Term.gol name:Name)                               : Term
+  (Term.typ)                                         : Term
+  (Term.ann expr:Term type:Term)                     : Term
+  (Term.hol hash:Name)                               : Term     
+  (Term.eql val0:Term val1:Term)                     : Term
+  (Term.rwt name:Name witn:Term goal:Term expr:Term) : Term
+
+Text.Type : String
+  Text.Type = (StrCons 84 (StrCons 121 (StrCons 112 (StrCons 101 StrNil))))
+Text.U32 : String
+  Text.U32 = (StrCons 85 (StrCons 51 (StrCons 50 StrNil)))
+
+Text.Colon : String
+  Text.Colon = (StrCons 58 StrNil)
+
+Text.Underscore : String
+  Text.Underscore = (StrCons 95 StrNil)
+
+Text.Question : String
+  Text.Question = (StrCons 63 StrNil)
+
+Text.Lambda : String
+  Text.Lambda = (StrCons 955 StrNil)
+
+Text.Forall : String
+  Text.Forall = (StrCons 8704 StrNil)
+
+Text.LParen : String
+  Text.LParen = (StrCons 40 StrNil)
+
+Text.RParen : String
+  Text.RParen = (StrCons 41 StrNil)
+
+Text.Rewrite : String
+  Text.Rewrite = (StrCons 114 (StrCons 101 (StrCons 119 (StrCons 114 (StrCons 105 (StrCons 116 (StrCons 101 (StrCons 32 StrNil))))))))
+
+Text.With : String
+  Text.With = (StrCons 119 (StrCons 105 (StrCons 116 (StrCons 104 StrNil))))
+
+Text.In : String
+  Text.In = (StrCons 105 (StrCons 110 StrNil))
+
+Text.Refl : String
+  Text.Refl = (StrCons 114 (StrCons 101 (StrCons 102 (StrCons 108 (StrCons 32 StrNil)))))
+
+Text.Let : String
+  Text.Let = (StrCons 108 (StrCons 101 (StrCons 116 (StrCons 32 StrNil))))
+
+Text.Def : String
+  Text.Def = (StrCons 100 (StrCons 101 (StrCons 102 (StrCons 32 StrNil))))
+
+Text.Eql : String
+  Text.Eql = (StrCons 61 StrNil)
+
+Text.Plus : String
+  Text.Plus = (StrCons 43 StrNil)
+
+Text.Sub : String
+  Text.Sub = (StrCons 45 StrNil)
+
+Text.Mul : String
+  Text.Mul = (StrCons 42 StrNil)
+
+Text.Div : String
+  Text.Div = (StrCons 47 StrNil)
+
+Text.Mod : String
+  Text.Mod = (StrCons 37 StrNil)
+
+Text.And : String
+  Text.And = (StrCons 38 StrNil)
+
+Text.Or : String
+  Text.Or = (StrCons 124 StrNil)
+
+Text.Xor : String
+  Text.Xor = (StrCons 94 StrNil)
+
+Text.Shl : String
+  Text.Shl = (StrCons 60 (StrCons 60 StrNil))
+
+Text.Shr : String
+  Text.Shr = (StrCons 62 (StrCons 62 StrNil))
+
+Text.Lte : String
+  Text.Lte = (StrCons 60 (StrCons 61 StrNil))
+
+Text.Ltn : String
+  Text.Ltn = (StrCons 60 StrNil)
+
+Text.Gte : String
+  Text.Gte = (StrCons 62 (StrCons 61 StrNil))
+
+Text.Gtn : String
+  Text.Gtn = (StrCons 62 StrNil)
+
+Text.Neq : String
+  Text.Neq = (StrCons 33 (StrCons 61 StrNil))
+
+Text.Single_quotes : String
+  Text.Single_quotes = (StrCons 39 StrNil)
+
+Text.LBrace : String
+  Text.LBrace = (StrCons 123 StrNil)
+
+Text.RBrace : String
+  Text.RBrace = (StrCons 125 StrNil)
+
+Text.DColon : String
+  Text.DColon = (StrCons 58 (StrCons 58 StrNil))
+
+Text.DEql : String
+  Text.DEql = (StrCons 61 (StrCons 61 StrNil))
+
+Text.Quote : String
+  Text.Quote = (StrCons 34 StrNil)
+
+
+
+// TODO: complete
+(Parser.parse_oper) : (Parser Op)
+  (Parser.parse_oper) =
+    (Parser.grammar Op (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Plus) (Parser.done Op Op.ADD))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Sub)  (Parser.done Op Op.SUB))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Mul)  (Parser.done Op Op.MUL))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Div)  (Parser.done Op Op.DIV))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Mod)  (Parser.done Op Op.MOD))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.And)  (Parser.done Op Op.AND))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Or)   (Parser.done Op Op.OR))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Xor)  (Parser.done Op Op.XOR))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Shl)  (Parser.done Op Op.SHL))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Shr)  (Parser.done Op Op.SHR))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Lte)  (Parser.done Op Op.LTE))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Ltn)  (Parser.done Op Op.LTN))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.DEql) (Parser.done Op Op.EQL))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Gte)  (Parser.done Op Op.GTE))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Gtn)  (Parser.done Op Op.GTN))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Neq)  (Parser.done Op Op.NEQ))
+                       (List.nil (Parser (Maybe Op))))))))))))))))))))
+
+(Parser.parse_var) : (Parser (Maybe Term))
+  (Parser.parse_var) = (Parser.bind String (Maybe Term) (Parser.parse_name) λname (Parser.parse_var.0 name))
+
+(Parser.parse_var.0 name:String) : (Parser (Maybe Term))
+  (Parser.parse_var.0 StrNil)   = (Parser.done _ (Maybe.none Term))
+  (Parser.parse_var.0 (StrCons x xs)) = (Parser.parse_var.1
+    // (String.equal (StrCons x xs) "Type")
+    // (String.equal (StrCons x xs) "U32")
+    (String.equal (StrCons x xs) Text.Type)
+    (String.equal (StrCons x xs) Text.U32)
+    (Char.is_upper x)
+    (Char.is_numeric x)
+    (StrCons x xs))
+
+(Parser.parse_var.1 a:U32 b:U32 c:U32 d:U32 str:String) : (Parser (Maybe Term))
+  (Parser.parse_var.1 1 b c d str) = (Parser.done (Maybe Term) (Maybe.some Term Term.typ))
+  (Parser.parse_var.1 a 1 c d str) = (Parser.done (Maybe Term) (Maybe.some Term Term.u32))
+  (Parser.parse_var.1 a b 1 d str) = (Parser.done (Maybe Term) (Maybe.some Term (Term.cts (Name.make str) (List.nil Term))))
+  (Parser.parse_var.1 a b c 1 str) = (Parser.done (Maybe Term) (Maybe.some Term (Term.n32 (U32.read str))))
+  (Parser.parse_var.1 a b c d str) =
+    (Parser.bind Bool (Maybe Term) (Parser.match_text Text.Colon) (λis_ann (Parser.parse_var.2 (Bool.if U32 is_ann 1 0) str)))
+
+(Parser.parse_var.2 i:U32 str:String) : (Parser (Maybe Term))
+  (Parser.parse_var.2 0 str) = (Parser.done (Maybe Term) (Maybe.some Term (Term.var (Name.make str))))
+  (Parser.parse_var.2 1 str) =
+    (Parser.bind Term (Maybe Term) Parser.parse_term λterm (Parser.done (Maybe Term) (Maybe.some Term (Term.ann (Term.var (Name.make str)) term))))
+
+(Parser.parse_let) : (Parser (Maybe Term))
+(Parser.parse_let) = (Parser.guard Term (Parser.match_text Text.Let)
+  (Parser.bind String Term (Parser.parse_name)            λname
+  (Parser.bind Bool Term (Parser.match_text Text.Colon)   λanns
+  (Parser.parse_let_ann anns name))))
+
+(Parser.parse_let_ann b:Bool name:String) : (Parser Term)
+  (Parser.parse_let_ann Bool.true name) =
+    (Parser.bind Term Term Parser.parse_term            λtype
+    (Parser.bind Unit Term (Parser.parse_text Text.Eql) λskip
+    (Parser.bind Term Term Parser.parse_term            λexpr
+    (Parser.bind Term Term Parser.parse_term            λbody
+    (Parser.done Term (Term.let (Name.make name) (Term.ann expr type) body))))))
+  (Parser.parse_let_ann Bool.false name) =
+    (Parser.bind Unit Term (Parser.parse_text Text.Eql) λskip
+    (Parser.bind Term Term Parser.parse_term            λexpr
+    (Parser.bind Term Term Parser.parse_term            λbody
+    (Parser.done Term (Term.let (Name.make name) expr body)))))
+
+(Parser.parse_def) : (Parser (Maybe Term))
+(Parser.parse_def) = (Parser.guard Term (Parser.match_text Text.Def)
+  (Parser.bind String Term (Parser.parse_name)          λname
+  (Parser.bind Bool Term (Parser.match_text Text.Colon) λanns
+  (Parser.parse_def_ann anns name))))
+
+(Parser.parse_def_ann b:Bool name:String) : (Parser Term)
+  (Parser.parse_def_ann Bool.true name) =
+    (Parser.bind Term Term Parser.parse_term            λtype
+    (Parser.bind Unit Term (Parser.parse_text Text.Eql) λskip
+    (Parser.bind Term Term Parser.parse_term            λexpr
+    (Parser.bind Term Term Parser.parse_term            λbody
+    (Parser.done Term (Term.def (Name.make name) (Term.ann expr type) body))))))
+  (Parser.parse_def_ann Bool.false name) =
+    (Parser.bind Unit Term (Parser.parse_text Text.Eql) λskip
+    (Parser.bind Term Term Parser.parse_term            λexpr
+    (Parser.bind Term Term Parser.parse_term            λbody
+    (Parser.done Term (Term.def (Name.make name) expr body)))))
+
+(Parser.parse_hol) : (Parser (Maybe Term))
+(Parser.parse_hol) = (Parser.guard Term (Parser.match_text Text.Underscore)
+  (Parser.bind String Term (Parser.parse_name) λname
+  (Parser.done Term (Term.hol (Name.make name)))))
+
+(Parser.parse_gol) : (Parser (Maybe Term))
+(Parser.parse_gol) = (Parser.guard Term (Parser.match_text Text.Question)
+  (Parser.bind String Term (Parser.parse_name) λname
+  (Parser.done Term (Term.gol (Name.make name)))))
+
+(Parser.parse_lam) : (Parser (Maybe Term))
+(Parser.parse_lam) = (Parser.guard Term (Parser.match_text Text.Lambda)
+  (Parser.bind String Term (Parser.parse_name) λname
+  (Parser.bind Term Term (Parser.parse_term)   λbody
+  (Parser.done Term (Term.lam (Name.make name) body)))))
+
+(Parser.parse_all) : (Parser (Maybe Term))
+(Parser.parse_all) = (Parser.guard Term (Parser.match_text Text.Forall)
+  (Parser.bind Unit Term (Parser.parse_text Text.LParen) λskip
+  (Parser.bind String Term (Parser.parse_name)           λname
+  (Parser.bind Unit Term (Parser.parse_text Text.Colon)  λskip
+  (Parser.bind Term Term (Parser.parse_term)             λtype
+  (Parser.bind Unit Term (Parser.parse_text Text.RParen) λskip
+  (Parser.bind Term Term (Parser.parse_term)             λbody
+  (Parser.done Term (Term.all (Name.make name) type body)))))))))
+
+(Parser.parse_rwt) : (Parser (Maybe Term))
+(Parser.parse_rwt) = (Parser.guard Term (Parser.match_text Text.Rewrite)
+  (Parser.bind String Term (Parser.parse_name)         λname
+  (Parser.bind Unit Term (Parser.parse_text Text.With) λskip
+  (Parser.bind Term Term (Parser.parse_term)           λwitn
+  (Parser.bind Unit Term (Parser.parse_text Text.With) λskip
+  (Parser.bind Term Term (Parser.parse_term)           λgoal
+  (Parser.bind Term Term (Parser.parse_term)           λexpr
+  (Parser.done Term (Term.rwt (Name.make name) witn goal expr)))))))))
+
+(Parser.parse_rfl) : (Parser (Maybe Term))
+(Parser.parse_rfl) = (Parser.guard Term (Parser.match_text Text.Refl)
+  (Parser.bind Term Term (Parser.parse_term) λexpr
+  (Parser.done Term (Term.rfl expr))))
+
+(Parser.parse_chr) : (Parser (Maybe Term))
+(Parser.parse_chr) = (Parser.guard Term (Parser.match_text Text.Single_quotes)
+  (Parser.bind U32 Term (Parser.parse_one)             λchr
+  (Parser.bind Unit Term (Parser.parse_text Text.With) λskip
+  (Parser.done Term (Term.n32 chr)))))
+
+(Parser.parse_o32) : (Parser (Maybe Term))
+  (Parser.parse_o32) = (Parser.guard Term (Parser.peek_conds (List.cons ∀(x:Char)U32 λx(== x 40) // '('
+                                                             (List.cons ∀(x:Char)U32 λx(Parser.is_operator x)
+                                                             (List.nil  ∀(x:Char)U32))))
+    (Parser.bind Unit Term (Parser.parse_text Text.LParen) λskip
+    (Parser.bind Op Term (Parser.parse_oper)               λoper
+    (Parser.bind Term Term (Parser.parse_term)             λval0
+    (Parser.bind Term Term (Parser.parse_term)             λval1
+    (Parser.bind Unit Term (Parser.parse_text Text.RParen) λskip
+    (Parser.done Term (Term.o32 oper val0 val1))))))))
+
+(Parser.parse_cts) : (Parser (Maybe Term))
+  (Parser.parse_cts) = (Parser.guard Term (Parser.peek_conds (List.cons ∀(x:Char)U32 λx(== x 40) // '('
+                                                             (List.cons ∀(x:Char)U32 λx(Char.is_upper x)
+                                                             (List.nil  ∀(x:Char)U32))))
+    (Parser.bind Unit Term (Parser.parse_text Text.LParen)                                                    λskip
+    (Parser.bind String Term (Parser.parse_name)                                                              λname
+    (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text Text.RParen) Parser.parse_term) λargs
+    (Parser.done Term (Term.cts (Name.make name) args))))))
+
+(Parser.parse_ann_eql) : (Parser (Maybe Term))
+(Parser.parse_ann_eql) = (Parser.guard Term (Parser.match_text Text.LBrace)
+  (Parser.bind Term Term (Parser.parse_term)             λval0
+  (Parser.bind Bool Term (Parser.match_text Text.DColon) λanns
+  (Parser.parse_ann_eql_go anns val0))))
+
+(Parser.parse_ann_eql_go b:Bool val0:Term) : (Parser Term)
+  (Parser.parse_ann_eql_go Bool.true val0) =
+    (Parser.bind Term Term (Parser.parse_term)             λval1
+    (Parser.bind Unit Term (Parser.parse_text Text.RBrace) λskip
+    (Parser.done Term (Term.ann val0 val1))))
+  (Parser.parse_ann_eql_go Bool.false val0) =
+    (Parser.bind Unit Term (Parser.parse_text Text.DEql) λskip
+    (Parser.bind Term Term (Parser.parse_term)             λval1
+    (Parser.bind Unit Term (Parser.parse_text Text.RBrace) λskip
+    (Parser.done Term (Term.eql val0 val1)))))
+
+(Parser.parse_app) : (Parser (Maybe Term))
+(Parser.parse_app) = (Parser.guard Term (Parser.match_text Text.LParen)
+  (Parser.bind Term Term (Parser.parse_term)                                                                λfunc
+  (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text Text.RParen) Parser.parse_term) λargs
+  (Parser.done Term ((List.fold Term ∀(a:Term)Term args λx(x) λxλtλf(t (Term.app f x))) func)))))
+
+// (Parser.parse_str) : (Parser (Maybe Term))
+// (Parser.parse_str) = (Parser.guard Term (Parser.match_text Text.Quote)
+//   (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text Text.Quote) Parser.parse_one) λchars
+//   (Parser.done Term (Parser.parse_str_make chars))))
+
+// (Parser.parse_str_make (List Term)) : Term
+// (Parser.parse_str_make (List.cons x xs) = (Term.cts (Name.make StrCons) (List.cons (N32 x) (Parser.parse_str_make xs))))
+// (Parser.parse_str_make List.nil) = (Term.cts (Name.make StrNil) List.nil)
+
+
+// FIXME: or better INFER ME
+(Parser.parse_term) : (Parser Term)
+//   (Parser.parse_term) =
+//     (Parser.bind Term Term ((Parser.parse_term.ini) λini
+//     (Parser.bind ∀(x:Term)Term Term ((Parser.parse_term.end) λend
+//     (Parser.done Term (end ini))))))
+
+(Parser.parse_term.ini) : (Parser Term)
+(Parser.parse_term.ini) =
+  (Parser.grammar Term (List.cons (Parser (Maybe Term)) Parser.parse_def
+                       (List.cons (Parser (Maybe Term)) Parser.parse_let
+                       (List.cons (Parser (Maybe Term)) Parser.parse_cts
+                       (List.cons (Parser (Maybe Term)) Parser.parse_o32
+                       (List.cons (Parser (Maybe Term)) Parser.parse_all
+                       (List.cons (Parser (Maybe Term)) Parser.parse_lam
+                       (List.cons (Parser (Maybe Term)) Parser.parse_app
+                       (List.cons (Parser (Maybe Term)) Parser.parse_chr
+                       // (List.cons (Parser (Maybe Term)) Parser.parse_str
+                       (List.cons (Parser (Maybe Term)) Parser.parse_gol
+                       (List.cons (Parser (Maybe Term)) Parser.parse_rfl
+                       (List.cons (Parser (Maybe Term)) Parser.parse_rwt
+                       (List.cons (Parser (Maybe Term)) Parser.parse_ann_eql
+                       (List.cons (Parser (Maybe Term)) Parser.parse_hol
+                       (List.cons (Parser (Maybe Term)) Parser.parse_var
+                       (List.nil  (Parser (Maybe Term))))))))))))))))))
+
+(Parser.parse_term.end) : (Parser ∀(x:Term)Term)
+(Parser.parse_term.end) =
+  let xs = (List.cons (Parser (Maybe ∀(x:Term)Term)) (Parser.done (Maybe ∀(x:Term)Term) (Maybe.some ∀(x:Term)Term λx(x))) 
+           (List.nil (Parser (Maybe ∀(x:Term)Term))))
+
+  (Parser.grammar ∀(x:Term)Term xs)

@@ -453,7 +453,7 @@ TodoMsg.TODO : String
   (Parser.skipper StrNil)         = StrNil
   (Parser.skipper (StrCons x xs)) = (Parser.skipper.go (Char.is_space x) (== x 47) x xs)
 
-(Parser.skipper.go isSpace:U32 isSlash:U32 x:Char xs:String): String
+(Parser.skipper.go is_space:U32 is_slash:U32 x:Char xs:String): String
   (Parser.skipper.go 0 0 x xs) = (StrCons x xs)
   (Parser.skipper.go 1 c x xs) = (Parser.skipper xs)
   (Parser.skipper.go s 1 x xs) = (Parser.skipper.drop_comment xs)
@@ -462,7 +462,7 @@ TodoMsg.TODO : String
   (Parser.skipper.drop_comment StrNil)         = StrNil
   (Parser.skipper.drop_comment (StrCons x xs)) = (Parser.skipper.drop_comment.go (== x 10) x xs) 
 
-(Parser.skipper.drop_comment.go isSpace:U32 x:Char xs:String): String
+(Parser.skipper.drop_comment.go is_space:U32 x:Char xs:String): String
   (Parser.skipper.drop_comment.go 1 x xs) = (Parser.skipper xs)
   (Parser.skipper.drop_comment.go 0 x xs) = (Parser.skipper.drop_comment xs)
 

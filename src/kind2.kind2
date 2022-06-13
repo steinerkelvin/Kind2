@@ -20,10 +20,8 @@
   (U32.read str) = (U32.read.go str 0)
 
 (U32.read.go str:String r:U32) : U32
-  (U32.read.go StrNil         r) = r
-  // TODO: with string sugar
-  // (U32.read.go (StrCons x xs) r) = (U32.if U32 (& (<= '0' x) (<= x '9')) (U32.read.go xs (+ (* r 10) (- x '0'))) 0) 
-  (U32.read.go (StrCons x xs) r) = (U32.if U32 (& (<= 48 x) (<= x 57)) (U32.read.go xs (+ (* r 10) (- x 48))) 0)
+  (U32.read.go String.nil         r) = r
+  (U32.read.go (String.cons x xs) r) = (U32.if U32 (& (<= '0' x) (<= x '9')) (U32.read.go xs (+ (* r 10) (- x '0'))) 0) 
 
 // Unit
 // ====
@@ -151,7 +149,7 @@ Name : Type
 
 (Name.get_string name:Name) : String
   (Name.get_string (Name.new str hash)) = str
-  (Name.get_string (Name.new str hash)) = (String.concat TodoMsg.TODO str)
+  (Name.get_string (Name.new str hash)) = (String.concat "TODO: Name.get_string" str)
 
 (Name.equal a_name:Name b_name:Name) : U32
   (Name.equal (Name.new a_str a_hash) (Name.new b_str b_hash)) = (== a_hash b_hash)
@@ -163,43 +161,43 @@ Char : Type
   Char = U32
 
 String : Type
-  StrNil                          : String
-  (StrCons head:Char tail:String) : String 
+  (String.cons head:Char tail:String) : String
+  (String.nil): String
 
 // Returns true if a string is empty
 (String.is_empty s:String): Bool
-  (String.is_empty StrNil)         = Bool.true
-  (String.is_empty (StrCons x xs)) = Bool.false
+  (String.is_empty String.nil)         = Bool.true
+  (String.is_empty (String.cons x xs)) = Bool.false
 
 // Concatenates two strings
 (String.concat a:String b:String) : String
-  (String.concat StrNil         ys) = ys
-  (String.concat (StrCons x xs) ys) = (StrCons x (String.concat xs ys))
+  (String.concat String.nil         ys) = ys
+  (String.concat (String.cons x xs) ys) = (String.cons x (String.concat xs ys))
 
 // Concatenates a list of strings
 (String.flatten a:(List String)) : String
-  (String.flatten (List.nil a))            = StrNil
+  (String.flatten (List.nil a))            = String.nil
   (String.flatten (List.cons String x xs)) = (String.concat x (String.flatten xs))
 
 // Returns true if two strings are equal
 (String.equal xs:String ys:String) : U32
-  (String.equal StrNil         StrNil)         = 1
-  (String.equal (StrCons x xs) (StrCons y ys)) = (& (== x y) (String.equal xs ys))
+  (String.equal String.nil         String.nil)         = 1
+  (String.equal (String.cons x xs) (String.cons y ys)) = (& (== x y) (String.equal xs ys))
   (String.equal xs             ys)             = 0
 
 (String.hash xs:String) : U32
   (String.hash str) = (String.hash.go str 0)
 
 (String.hash.go xs:String hash:U32) : U32
-  (String.hash.go StrNil         hash) = hash
-  (String.hash.go (StrCons x xs) hash) = (String.hash.go xs (+ (- (<< hash 5) hash) x))
+  (String.hash.go String.nil         hash) = hash
+  (String.hash.go (String.cons x xs) hash) = (String.hash.go xs (+ (- (<< hash 5) hash) x))
 
 (String.map xs:String f:∀(x:Char)Char) : String
-  (String.map StrNil         f) = StrNil
-  (String.map (StrCons x xs) f) = (StrCons (f x) (String.map xs f))
+  (String.map String.nil         f) = String.nil
+  (String.map (String.cons x xs) f) = (String.cons (f x) (String.map xs f))
 
 (String.join xs:(List String) sep:String) : String
-  (String.join (List.nil String)                       sep) = StrNil
+  (String.join (List.nil String)                       sep) = String.nil
   (String.join (List.cons String x (List.nil String))  sep) = x
   (String.join (List.cons String x xs)                 sep) = (String.flatten (List.cons String x (List.cons String (String.join xs sep) (List.nil String))))
 
@@ -323,53 +321,39 @@ Code : Type
 (Parser a:Type): Type
   (Parser a) = ∀(x: Code) (Answer a)
 
-// TODO: Improve later with string sugar
-TodoMsg.SyntaxError : String
-  TodoMsg.SyntaxError = (StrCons 83 (StrCons 121 (StrCons 110 (StrCons 116 (StrCons 97 (StrCons 120 (StrCons 32 (StrCons 69 (StrCons 114 (StrCons 114 (StrCons 111 (StrCons 114 StrNil))))))))))))
-  
-TodoMsg.TODO : String
-  TodoMsg.TODO = (StrCons 84 (StrCons 79 (StrCons 68 (StrCons 79 StrNil))))
-
 (Parser.is_name_char chr:Char) : Char
   (Parser.is_name_char chr) = 
-  // TODO: rewrite later using quoted strings
-  // let is_letter = (| (& (<= 'a' chr) (<= chr 'z')) (& (<= 'A' chr) (<= chr 'Z')))
-  // let is_number = (& (<= '0' chr) (<= chr '9'))
-  // let is_symbol = (| (== '_' chr) (== '.' chr))
-  let is_letter = (| (& (<= 97 chr) (<= chr 122)) (& (<= 65 chr) (<= chr 90)))
-  let is_number = (& (<= 48 chr) (<= chr 57))
-  let is_symbol = (| (== 95 chr) (== 16 chr))
+  let is_letter = (| (& (<= 'a' chr) (<= chr 'z')) (& (<= 'A' chr) (<= chr 'Z')))
+  let is_number = (& (<= '0' chr) (<= chr '9'))
+  let is_symbol = (| (== '_' chr) (== '.' chr))
   (| is_letter (| is_number is_symbol))
 
 (Char.is_upper chr:Char) : U32
 (Char.is_upper chr) =
-  // (& (<= 'A' chr) (<= chr 'Z'))
-  (& (<= 65 chr) (<= 90 chr))
+  (& (<= 'A' chr) (<= chr 'Z'))
 
 (Char.is_lower chr:Char) : U32
 (Char.is_lower chr) =
-  // (& (<= 'a' chr) (<= chr 'z'))
-  (& (<= 97 chr) (<= chr 122))
+  (& (<= 'a' chr) (<= chr 'z'))
 
 (Char.is_numeric chr:Char) : U32
 (Char.is_numeric chr) =
-  // (& (<= '0' chr) (<= '9' chr))
-  (& (<= 48 chr) (<= chr 57))
+  (& (<= '0' chr) (<= '9' chr))
 
 (Parser.is_operator chr:Char) : U32
   (Parser.is_operator chr) =
-    (| (== 43  chr)
-    (| (== 45  chr)
-    (| (== 42  chr)
-    (| (== 47  chr)
-    (| (== 37  chr)
-    (| (== 38  chr)
-    (| (== 124 chr)
-    (| (== 94  chr)
-    (| (== 60  chr)
-    (| (== 62  chr)
-    (| (== 61  chr)
-    (| (== 33  chr)
+    (| (== '+' chr)
+    (| (== '-' chr)
+    (| (== '*' chr)
+    (| (== '/' chr)
+    (| (== '%' chr)
+    (| (== '&' chr)
+    (| (== '|' chr)
+    (| (== '^' chr)
+    (| (== '<' chr)
+    (| (== '>' chr)
+    (| (== '=' chr)
+    (| (== '!' chr)
        0))))))))))))
 
 (Parser.bind a:Type b:Type a_parser:(Parser a) f:(∀(x:a)(Parser b))): (Parser b)
@@ -389,38 +373,38 @@ TodoMsg.TODO : String
   (Parser.parse_one) = λcode (Parser.parse_one.go code)
 
 (Parser.parse_one.go code:String) : (Answer U32)
-  (Parser.parse_one.go (StrCons x xs)) = (Answer.parsed U32 xs x)
-  (Parser.parse_one.go StrNil)         = (Answer.parsed U32 StrNil 0)
+  (Parser.parse_one.go (String.cons x xs)) = (Answer.parsed U32 xs x)
+  (Parser.parse_one.go String.nil)         = (Answer.parsed U32 String.nil 0)
 
 (Parser.get_name) : ∀(code: Code)(Pair String String)
   (Parser.get_name) = λcode (Parser.get_name.go code)
 
 (Parser.get_name.go code:Code) : (Pair String String)
-  (Parser.get_name.go StrNil)              = (Pair.new String String StrNil StrNil)
-  (Parser.get_name.go (StrCons head tail)) = (Parser.get_name.go_1 (Parser.is_name_char head) head tail)
+  (Parser.get_name.go String.nil)              = (Pair.new String String String.nil String.nil)
+  (Parser.get_name.go (String.cons head tail)) = (Parser.get_name.go_1 (Parser.is_name_char head) head tail)
 
 (Parser.get_name.go_1 cond:U32 head:Char tail:String) : (Pair String String)
-  (Parser.get_name.go_1 0 head tail) = (Pair.new String String (StrCons head tail) StrNil)
+  (Parser.get_name.go_1 0 head tail) = (Pair.new String String (String.cons head tail) String.nil)
   (Parser.get_name.go_1 1 head tail) = (Parser.get_name.go_2 head (Parser.get_name.go tail))
 
 (Parser.get_name.go_2 head:Char name_pair:(Pair String String)) : (Pair String String)
-  (Parser.get_name.go_2 head (Pair.new Code String code name)) = (Pair.new Code String code (StrCons head name))
+  (Parser.get_name.go_2 head (Pair.new Code String code name)) = (Pair.new Code String code (String.cons head name))
 
 (Parser.matcher consume:Bool text:(List (∀(x:Char)U32))) : (Parser Bool)
   (Parser.matcher consume text) = λcode (Parser.matcher.go text code consume λx(x))
 
 (Parser.matcher.go text:(List (∀(x:Char)U32)) code:Code consume:Bool redo:(∀(x:String)Code)) : (Answer Bool)
   (Parser.matcher.go (List.nil  (∀(x:Char)U32))      ys             consume redo) = (Answer.parsed Bool ((Bool.if ∀(x:String)String consume λx(x) redo) ys) Bool.true)
-  (Parser.matcher.go (List.cons (∀(x:Char)U32) x xs) StrNil         consume redo) = (Answer.parsed Bool (redo StrNil) Bool.false)
-  (Parser.matcher.go (List.cons (∀(x:Char)U32) x xs) (StrCons y ys) consume redo) = (Parser.matcher.go.test (x y) xs y ys consume redo)
+  (Parser.matcher.go (List.cons (∀(x:Char)U32) x xs) String.nil         consume redo) = (Answer.parsed Bool (redo String.nil) Bool.false)
+  (Parser.matcher.go (List.cons (∀(x:Char)U32) x xs) (String.cons y ys) consume redo) = (Parser.matcher.go.test (x y) xs y ys consume redo)
 
 (Parser.matcher.go.test cond:U32 xs:(List (∀(x:Char)U32)) y:Char ys:String consume:Bool redo:(∀(x:String)Code)) : (Answer Bool)
-  (Parser.matcher.go.test 0 xs y ys consume redo) = (Answer.parsed Bool (redo (StrCons y ys)) Bool.false)
-  (Parser.matcher.go.test 1 xs y ys consume redo) = (Parser.matcher.go xs ys consume λk(redo (StrCons y k)))
+  (Parser.matcher.go.test 0 xs y ys consume redo) = (Answer.parsed Bool (redo (String.cons y ys)) Bool.false)
+  (Parser.matcher.go.test 1 xs y ys consume redo) = (Parser.matcher.go xs ys consume λk(redo (String.cons y k)))
 
 (Parser.text_comparer str:String) : (List ∀(c:Char)U32)
-  (Parser.text_comparer StrNil)         = (List.nil  ∀(c:Char)U32)
-  (Parser.text_comparer (StrCons x xs)) = (List.cons ∀(c:Char)U32 λc(== x c) (Parser.text_comparer xs))
+  (Parser.text_comparer String.nil)         = (List.nil  ∀(c:Char)U32)
+  (Parser.text_comparer (String.cons x xs)) = (List.cons ∀(c:Char)U32 λc(== x c) (Parser.text_comparer xs))
 
 (Parser.peek_conds conds:(List (∀(x:Char)U32))) : (Parser Bool)
   (Parser.peek_conds conds) = λcode ((Parser.matcher Bool.false conds) (Parser.skipper code))
@@ -442,7 +426,7 @@ TodoMsg.TODO : String
   (Parser.parse_text_here text) = (Parser.bind Bool Unit (Parser.match_text_here text) λgot(Parser.text_here_got got))
 
 (Parser.text_here_got got:Bool) : (Parser Unit)
-  (Parser.text_here_got (Bool.false)) = λcode (Answer.failed Unit TodoMsg.SyntaxError) 
+  (Parser.text_here_got (Bool.false)) = λcode (Answer.failed Unit "Syntax Error.") 
   (Parser.text_here_got (Bool.true))  = (Parser.done Unit Unit.new)
 
 (Parser.parse_text text:String) : (Parser Unit)
@@ -450,17 +434,17 @@ TodoMsg.TODO : String
 
 // Skips spaces and comments
 (Parser.skipper str:String) : String
-  (Parser.skipper StrNil)         = StrNil
-  (Parser.skipper (StrCons x xs)) = (Parser.skipper.go (Char.is_space x) (== x 47) x xs)
+  (Parser.skipper String.nil)         = String.nil
+  (Parser.skipper (String.cons x xs)) = (Parser.skipper.go (Char.is_space x) (== x 47) x xs)
 
 (Parser.skipper.go is_space:U32 is_slash:U32 x:Char xs:String): String
-  (Parser.skipper.go 0 0 x xs) = (StrCons x xs)
+  (Parser.skipper.go 0 0 x xs) = (String.cons x xs)
   (Parser.skipper.go 1 c x xs) = (Parser.skipper xs)
   (Parser.skipper.go s 1 x xs) = (Parser.skipper.drop_comment xs)
 
 (Parser.skipper.drop_comment str:String): String
-  (Parser.skipper.drop_comment StrNil)         = StrNil
-  (Parser.skipper.drop_comment (StrCons x xs)) = (Parser.skipper.drop_comment.go (== x 10) x xs) 
+  (Parser.skipper.drop_comment String.nil)         = String.nil
+  (Parser.skipper.drop_comment (String.cons x xs)) = (Parser.skipper.drop_comment.go (== x 10) x xs) 
 
 (Parser.skipper.drop_comment.go is_space:U32 x:Char xs:String): String
   (Parser.skipper.drop_comment.go 1 x xs) = (Parser.skipper xs)
@@ -478,10 +462,9 @@ TodoMsg.TODO : String
 (Parser.parse_end) : (Parser Bool)
   Parser.parse_end = λcode (Parser.parse_end.go code)
 (Parser.parse_end.go code:String) : (Answer Bool)
-  (Parser.parse_end.go StrNil)         = (Answer.parsed Bool StrNil Bool.true)
-  (Parser.parse_end.go (StrCons x xs)) = (Answer.parsed Bool (StrCons x xs) Bool.false)
+  (Parser.parse_end.go String.nil)         = (Answer.parsed Bool String.nil Bool.true)
+  (Parser.parse_end.go (String.cons x xs)) = (Answer.parsed Bool (String.cons x xs) Bool.false)
 
-// Parses until a stop condition is true.
 (Parser.parse_until a:Type stop:(Parser Bool) parser:(Parser a)) : (Parser (List a))
   (Parser.parse_until a stop parser) = (Parser.bind Bool (List a) stop λs (Parser.parse_until.go a s stop parser))
 
@@ -494,7 +477,7 @@ TodoMsg.TODO : String
     (Parser.done (List a) (List.nil a))
 
 (Parser.grammar a:Type choices:(List (Parser (Maybe a))))          : (Parser a)
-  (Parser.grammar a (List.nil (Parser (Maybe a))))                 = λcode (Answer.failed a TodoMsg.TODO)
+  (Parser.grammar a (List.nil (Parser (Maybe a))))                 = λcode (Answer.failed a "TODO: Parser.grammer empty list")
   (Parser.grammar a (List.cons (Parser (Maybe a)) choice choices)) = λcode (Parser.grammar.go a (choice code) choices)
 
 (Parser.grammar.go a:Type choice_res:(Answer (Maybe a)) choices:(List (Parser (Maybe a)))) : (Answer a)
@@ -556,152 +539,37 @@ Term : Type
   (Term.eql val0:Term val1:Term)                     : Term
   (Term.rwt name:Name witn:Term goal:Term expr:Term) : Term
 
-Text.Type : String
-  Text.Type = (StrCons 84 (StrCons 121 (StrCons 112 (StrCons 101 StrNil))))
-Text.U32 : String
-  Text.U32 = (StrCons 85 (StrCons 51 (StrCons 50 StrNil)))
-
-Text.Colon : String
-  Text.Colon = (StrCons 58 StrNil)
-
-Text.Underscore : String
-  Text.Underscore = (StrCons 95 StrNil)
-
-Text.Question : String
-  Text.Question = (StrCons 63 StrNil)
-
-Text.Lambda : String
-  Text.Lambda = (StrCons 955 StrNil)
-
-Text.Forall : String
-  Text.Forall = (StrCons 8704 StrNil)
-
-Text.LParen : String
-  Text.LParen = (StrCons 40 StrNil)
-
-Text.RParen : String
-  Text.RParen = (StrCons 41 StrNil)
-
-Text.Rewrite : String
-  Text.Rewrite = (StrCons 114 (StrCons 101 (StrCons 119 (StrCons 114 (StrCons 105 (StrCons 116 (StrCons 101 (StrCons 32 StrNil))))))))
-
-Text.With : String
-  Text.With = (StrCons 119 (StrCons 105 (StrCons 116 (StrCons 104 StrNil))))
-
-Text.In : String
-  Text.In = (StrCons 105 (StrCons 110 StrNil))
-
-Text.Refl : String
-  Text.Refl = (StrCons 114 (StrCons 101 (StrCons 102 (StrCons 108 (StrCons 32 StrNil)))))
-
-Text.Let : String
-  Text.Let = (StrCons 108 (StrCons 101 (StrCons 116 (StrCons 32 StrNil))))
-
-Text.Def : String
-  Text.Def = (StrCons 100 (StrCons 101 (StrCons 102 (StrCons 32 StrNil))))
-
-Text.Eql : String
-  Text.Eql = (StrCons 61 StrNil)
-
-Text.Plus : String
-  Text.Plus = (StrCons 43 StrNil)
-
-Text.Sub : String
-  Text.Sub = (StrCons 45 StrNil)
-
-Text.Mul : String
-  Text.Mul = (StrCons 42 StrNil)
-
-Text.Div : String
-  Text.Div = (StrCons 47 StrNil)
-
-Text.Mod : String
-  Text.Mod = (StrCons 37 StrNil)
-
-Text.And : String
-  Text.And = (StrCons 38 StrNil)
-
-Text.Or : String
-  Text.Or = (StrCons 124 StrNil)
-
-Text.Xor : String
-  Text.Xor = (StrCons 94 StrNil)
-
-Text.Shl : String
-  Text.Shl = (StrCons 60 (StrCons 60 StrNil))
-
-Text.Shr : String
-  Text.Shr = (StrCons 62 (StrCons 62 StrNil))
-
-Text.Lte : String
-  Text.Lte = (StrCons 60 (StrCons 61 StrNil))
-
-Text.Ltn : String
-  Text.Ltn = (StrCons 60 StrNil)
-
-Text.Gte : String
-  Text.Gte = (StrCons 62 (StrCons 61 StrNil))
-
-Text.Gtn : String
-  Text.Gtn = (StrCons 62 StrNil)
-
-Text.Neq : String
-  Text.Neq = (StrCons 33 (StrCons 61 StrNil))
-
-Text.Single_quotes : String
-  Text.Single_quotes = (StrCons 39 StrNil)
-
-Text.LBrace : String
-  Text.LBrace = (StrCons 123 StrNil)
-
-Text.RBrace : String
-  Text.RBrace = (StrCons 125 StrNil)
-
-Text.DColon : String
-  Text.DColon = (StrCons 58 (StrCons 58 StrNil))
-
-Text.DEql : String
-  Text.DEql = (StrCons 61 (StrCons 61 StrNil))
-
-Text.Quote : String
-  Text.Quote = (StrCons 34 StrNil)
-
-
-
 // TODO: complete
 (Parser.parse_oper) : (Parser Op)
   (Parser.parse_oper) =
-    (Parser.grammar Op (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Plus) (Parser.done Op Op.ADD))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Sub)  (Parser.done Op Op.SUB))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Mul)  (Parser.done Op Op.MUL))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Div)  (Parser.done Op Op.DIV))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Mod)  (Parser.done Op Op.MOD))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.And)  (Parser.done Op Op.AND))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Or)   (Parser.done Op Op.OR))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Xor)  (Parser.done Op Op.XOR))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Shl)  (Parser.done Op Op.SHL))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Shr)  (Parser.done Op Op.SHR))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Lte)  (Parser.done Op Op.LTE))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Ltn)  (Parser.done Op Op.LTN))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.DEql) (Parser.done Op Op.EQL))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Gte)  (Parser.done Op Op.GTE))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Gtn)  (Parser.done Op Op.GTN))
-                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text Text.Neq)  (Parser.done Op Op.NEQ))
-                       (List.nil (Parser (Maybe Op))))))))))))))))))))
+    (Parser.grammar Op (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "+")  (Parser.done Op Op.ADD))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "*")  (Parser.done Op Op.MUL))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text (String.cons '/' (String.nil)))  (Parser.done Op Op.DIV))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "%")  (Parser.done Op Op.MOD))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "&")  (Parser.done Op Op.AND))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "|")  (Parser.done Op Op.OR))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "^")  (Parser.done Op Op.XOR))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "<<") (Parser.done Op Op.SHL))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text ">>") (Parser.done Op Op.SHR))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "<=") (Parser.done Op Op.LTE))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "<")  (Parser.done Op Op.LTN))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "==") (Parser.done Op Op.EQL))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text ">=") (Parser.done Op Op.GTE))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text ">")  (Parser.done Op Op.GTN))
+                       (List.cons (Parser (Maybe Op)) (Parser.guard Op (Parser.match_text "!=") (Parser.done Op Op.NEQ))
+                       (List.nil (Parser (Maybe Op)))))))))))))))))))
 
 (Parser.parse_var) : (Parser (Maybe Term))
   (Parser.parse_var) = (Parser.bind String (Maybe Term) (Parser.parse_name) λname (Parser.parse_var.0 name))
 
 (Parser.parse_var.0 name:String) : (Parser (Maybe Term))
-  (Parser.parse_var.0 StrNil)   = (Parser.done _ (Maybe.none Term))
-  (Parser.parse_var.0 (StrCons x xs)) = (Parser.parse_var.1
-    // (String.equal (StrCons x xs) "Type")
-    // (String.equal (StrCons x xs) "U32")
-    (String.equal (StrCons x xs) Text.Type)
-    (String.equal (StrCons x xs) Text.U32)
+  (Parser.parse_var.0 String.nil)   = (Parser.done _ (Maybe.none Term))
+  (Parser.parse_var.0 (String.cons x xs)) = (Parser.parse_var.1
+    (String.equal (String.cons x xs) "Type")
+    (String.equal (String.cons x xs) "U32")
     (Char.is_upper x)
     (Char.is_numeric x)
-    (StrCons x xs))
+    (String.cons x xs))
 
 (Parser.parse_var.1 a:U32 b:U32 c:U32 d:U32 str:String) : (Parser (Maybe Term))
   (Parser.parse_var.1 1 b c d str) = (Parser.done (Maybe Term) (Maybe.some Term Term.typ))
@@ -709,7 +577,7 @@ Text.Quote : String
   (Parser.parse_var.1 a b 1 d str) = (Parser.done (Maybe Term) (Maybe.some Term (Term.cts (Name.make str) (List.nil Term))))
   (Parser.parse_var.1 a b c 1 str) = (Parser.done (Maybe Term) (Maybe.some Term (Term.n32 (U32.read str))))
   (Parser.parse_var.1 a b c d str) =
-    (Parser.bind Bool (Maybe Term) (Parser.match_text Text.Colon) (λis_ann (Parser.parse_var.2 (Bool.if U32 is_ann 1 0) str)))
+    (Parser.bind Bool (Maybe Term) (Parser.match_text ":") (λis_ann (Parser.parse_var.2 (Bool.if U32 is_ann 1 0) str)))
 
 (Parser.parse_var.2 i:U32 str:String) : (Parser (Maybe Term))
   (Parser.parse_var.2 0 str) = (Parser.done (Maybe Term) (Maybe.some Term (Term.var (Name.make str))))
@@ -717,142 +585,141 @@ Text.Quote : String
     (Parser.bind Term (Maybe Term) Parser.parse_term λterm (Parser.done (Maybe Term) (Maybe.some Term (Term.ann (Term.var (Name.make str)) term))))
 
 (Parser.parse_let) : (Parser (Maybe Term))
-(Parser.parse_let) = (Parser.guard Term (Parser.match_text Text.Let)
+(Parser.parse_let) = (Parser.guard Term (Parser.match_text "let")
   (Parser.bind String Term (Parser.parse_name)            λname
-  (Parser.bind Bool Term (Parser.match_text Text.Colon)   λanns
+  (Parser.bind Bool Term (Parser.match_text ":")   λanns
   (Parser.parse_let_ann anns name))))
 
 (Parser.parse_let_ann b:Bool name:String) : (Parser Term)
   (Parser.parse_let_ann Bool.true name) =
     (Parser.bind Term Term Parser.parse_term            λtype
-    (Parser.bind Unit Term (Parser.parse_text Text.Eql) λskip
+    (Parser.bind Unit Term (Parser.parse_text "=") λskip
     (Parser.bind Term Term Parser.parse_term            λexpr
     (Parser.bind Term Term Parser.parse_term            λbody
     (Parser.done Term (Term.let (Name.make name) (Term.ann expr type) body))))))
   (Parser.parse_let_ann Bool.false name) =
-    (Parser.bind Unit Term (Parser.parse_text Text.Eql) λskip
+    (Parser.bind Unit Term (Parser.parse_text "=") λskip
     (Parser.bind Term Term Parser.parse_term            λexpr
     (Parser.bind Term Term Parser.parse_term            λbody
     (Parser.done Term (Term.let (Name.make name) expr body)))))
 
 (Parser.parse_def) : (Parser (Maybe Term))
-(Parser.parse_def) = (Parser.guard Term (Parser.match_text Text.Def)
+(Parser.parse_def) = (Parser.guard Term (Parser.match_text "def")
   (Parser.bind String Term (Parser.parse_name)          λname
-  (Parser.bind Bool Term (Parser.match_text Text.Colon) λanns
+  (Parser.bind Bool Term (Parser.match_text ":") λanns
   (Parser.parse_def_ann anns name))))
 
 (Parser.parse_def_ann b:Bool name:String) : (Parser Term)
   (Parser.parse_def_ann Bool.true name) =
     (Parser.bind Term Term Parser.parse_term            λtype
-    (Parser.bind Unit Term (Parser.parse_text Text.Eql) λskip
+    (Parser.bind Unit Term (Parser.parse_text "=") λskip
     (Parser.bind Term Term Parser.parse_term            λexpr
     (Parser.bind Term Term Parser.parse_term            λbody
     (Parser.done Term (Term.def (Name.make name) (Term.ann expr type) body))))))
   (Parser.parse_def_ann Bool.false name) =
-    (Parser.bind Unit Term (Parser.parse_text Text.Eql) λskip
+    (Parser.bind Unit Term (Parser.parse_text "=") λskip
     (Parser.bind Term Term Parser.parse_term            λexpr
     (Parser.bind Term Term Parser.parse_term            λbody
     (Parser.done Term (Term.def (Name.make name) expr body)))))
 
 (Parser.parse_hol) : (Parser (Maybe Term))
-(Parser.parse_hol) = (Parser.guard Term (Parser.match_text Text.Underscore)
+(Parser.parse_hol) = (Parser.guard Term (Parser.match_text "_")
   (Parser.bind String Term (Parser.parse_name) λname
   (Parser.done Term (Term.hol (Name.make name)))))
 
 (Parser.parse_gol) : (Parser (Maybe Term))
-(Parser.parse_gol) = (Parser.guard Term (Parser.match_text Text.Question)
+(Parser.parse_gol) = (Parser.guard Term (Parser.match_text "?")
   (Parser.bind String Term (Parser.parse_name) λname
   (Parser.done Term (Term.gol (Name.make name)))))
 
 (Parser.parse_lam) : (Parser (Maybe Term))
-(Parser.parse_lam) = (Parser.guard Term (Parser.match_text Text.Lambda)
+(Parser.parse_lam) = (Parser.guard Term (Parser.match_text "λ")
   (Parser.bind String Term (Parser.parse_name) λname
   (Parser.bind Term Term (Parser.parse_term)   λbody
   (Parser.done Term (Term.lam (Name.make name) body)))))
 
 (Parser.parse_all) : (Parser (Maybe Term))
-(Parser.parse_all) = (Parser.guard Term (Parser.match_text Text.Forall)
-  (Parser.bind Unit Term (Parser.parse_text Text.LParen) λskip
+(Parser.parse_all) = (Parser.guard Term (Parser.match_text "∀")
+  (Parser.bind Unit Term (Parser.parse_text "(") λskip
   (Parser.bind String Term (Parser.parse_name)           λname
-  (Parser.bind Unit Term (Parser.parse_text Text.Colon)  λskip
+  (Parser.bind Unit Term (Parser.parse_text ":")  λskip
   (Parser.bind Term Term (Parser.parse_term)             λtype
-  (Parser.bind Unit Term (Parser.parse_text Text.RParen) λskip
+  (Parser.bind Unit Term (Parser.parse_text ")") λskip
   (Parser.bind Term Term (Parser.parse_term)             λbody
   (Parser.done Term (Term.all (Name.make name) type body)))))))))
 
 (Parser.parse_rwt) : (Parser (Maybe Term))
-(Parser.parse_rwt) = (Parser.guard Term (Parser.match_text Text.Rewrite)
+(Parser.parse_rwt) = (Parser.guard Term (Parser.match_text "rewrite")
   (Parser.bind String Term (Parser.parse_name)         λname
-  (Parser.bind Unit Term (Parser.parse_text Text.With) λskip
+  (Parser.bind Unit Term (Parser.parse_text "with") λskip
   (Parser.bind Term Term (Parser.parse_term)           λwitn
-  (Parser.bind Unit Term (Parser.parse_text Text.With) λskip
+  (Parser.bind Unit Term (Parser.parse_text "with") λskip
   (Parser.bind Term Term (Parser.parse_term)           λgoal
   (Parser.bind Term Term (Parser.parse_term)           λexpr
   (Parser.done Term (Term.rwt (Name.make name) witn goal expr)))))))))
 
 (Parser.parse_rfl) : (Parser (Maybe Term))
-(Parser.parse_rfl) = (Parser.guard Term (Parser.match_text Text.Refl)
+(Parser.parse_rfl) = (Parser.guard Term (Parser.match_text "refl")
   (Parser.bind Term Term (Parser.parse_term) λexpr
   (Parser.done Term (Term.rfl expr))))
 
 (Parser.parse_chr) : (Parser (Maybe Term))
-(Parser.parse_chr) = (Parser.guard Term (Parser.match_text Text.Single_quotes)
+(Parser.parse_chr) = (Parser.guard Term (Parser.match_text "'")
   (Parser.bind U32 Term (Parser.parse_one)             λchr
-  (Parser.bind Unit Term (Parser.parse_text Text.With) λskip
+  (Parser.bind Unit Term (Parser.parse_text "with") λskip
   (Parser.done Term (Term.n32 chr)))))
 
 (Parser.parse_o32) : (Parser (Maybe Term))
-  (Parser.parse_o32) = (Parser.guard Term (Parser.peek_conds (List.cons ∀(x:Char)U32 λx(== x 40) // '('
+  (Parser.parse_o32) = (Parser.guard Term (Parser.peek_conds (List.cons ∀(x:Char)U32 λx(== x '(')
                                                              (List.cons ∀(x:Char)U32 λx(Parser.is_operator x)
                                                              (List.nil  ∀(x:Char)U32))))
-    (Parser.bind Unit Term (Parser.parse_text Text.LParen) λskip
+    (Parser.bind Unit Term (Parser.parse_text "(") λskip
     (Parser.bind Op Term (Parser.parse_oper)               λoper
     (Parser.bind Term Term (Parser.parse_term)             λval0
     (Parser.bind Term Term (Parser.parse_term)             λval1
-    (Parser.bind Unit Term (Parser.parse_text Text.RParen) λskip
+    (Parser.bind Unit Term (Parser.parse_text ")") λskip
     (Parser.done Term (Term.o32 oper val0 val1))))))))
 
 (Parser.parse_cts) : (Parser (Maybe Term))
-  (Parser.parse_cts) = (Parser.guard Term (Parser.peek_conds (List.cons ∀(x:Char)U32 λx(== x 40) // '('
+  (Parser.parse_cts) = (Parser.guard Term (Parser.peek_conds (List.cons ∀(x:Char)U32 λx(== x '(')
                                                              (List.cons ∀(x:Char)U32 λx(Char.is_upper x)
                                                              (List.nil  ∀(x:Char)U32))))
-    (Parser.bind Unit Term (Parser.parse_text Text.LParen)                                                    λskip
+    (Parser.bind Unit Term (Parser.parse_text "(")                                                    λskip
     (Parser.bind String Term (Parser.parse_name)                                                              λname
-    (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text Text.RParen) Parser.parse_term) λargs
+    (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text ")") Parser.parse_term) λargs
     (Parser.done Term (Term.cts (Name.make name) args))))))
 
 (Parser.parse_ann_eql) : (Parser (Maybe Term))
-(Parser.parse_ann_eql) = (Parser.guard Term (Parser.match_text Text.LBrace)
+(Parser.parse_ann_eql) = (Parser.guard Term (Parser.match_text "(")
   (Parser.bind Term Term (Parser.parse_term)             λval0
-  (Parser.bind Bool Term (Parser.match_text Text.DColon) λanns
+  (Parser.bind Bool Term (Parser.match_text "::") λanns
   (Parser.parse_ann_eql_go anns val0))))
 
 (Parser.parse_ann_eql_go b:Bool val0:Term) : (Parser Term)
   (Parser.parse_ann_eql_go Bool.true val0) =
     (Parser.bind Term Term (Parser.parse_term)             λval1
-    (Parser.bind Unit Term (Parser.parse_text Text.RBrace) λskip
+    (Parser.bind Unit Term (Parser.parse_text ")") λskip
     (Parser.done Term (Term.ann val0 val1))))
   (Parser.parse_ann_eql_go Bool.false val0) =
-    (Parser.bind Unit Term (Parser.parse_text Text.DEql) λskip
+    (Parser.bind Unit Term (Parser.parse_text "==") λskip
     (Parser.bind Term Term (Parser.parse_term)             λval1
-    (Parser.bind Unit Term (Parser.parse_text Text.RBrace) λskip
+    (Parser.bind Unit Term (Parser.parse_text ")") λskip
     (Parser.done Term (Term.eql val0 val1)))))
 
 (Parser.parse_app) : (Parser (Maybe Term))
-(Parser.parse_app) = (Parser.guard Term (Parser.match_text Text.LParen)
+(Parser.parse_app) = (Parser.guard Term (Parser.match_text "(")
   (Parser.bind Term Term (Parser.parse_term)                                                                λfunc
-  (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text Text.RParen) Parser.parse_term) λargs
+  (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text ")") Parser.parse_term) λargs
   (Parser.done Term ((List.fold Term ∀(a:Term)Term args λx(x) λxλtλf(t (Term.app f x))) func)))))
 
 // (Parser.parse_str) : (Parser (Maybe Term))
-// (Parser.parse_str) = (Parser.guard Term (Parser.match_text Text.Quote)
-//   (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text Text.Quote) Parser.parse_one) λchars
+// (Parser.parse_str) = (Parser.guard Term (Parser.match_text "'")
+//   (Parser.bind (List Term) Term (Parser.parse_until Term (Parser.match_text "'") Parser.parse_one) λchars
 //   (Parser.done Term (Parser.parse_str_make chars))))
 
 // (Parser.parse_str_make (List Term)) : Term
-// (Parser.parse_str_make (List.cons x xs) = (Term.cts (Name.make StrCons) (List.cons (N32 x) (Parser.parse_str_make xs))))
-// (Parser.parse_str_make List.nil) = (Term.cts (Name.make StrNil) List.nil)
-
+// (Parser.parse_str_make (List.cons x xs) = (Term.cts (Name.make String.cons) (List.cons (N32 x) (Parser.parse_str_make xs))))
+// (Parser.parse_str_make List.nil) = (Term.cts (Name.make String.nil) List.nil)
 
 // FIXME: or better INFER ME
 (Parser.parse_term) : (Parser Term)

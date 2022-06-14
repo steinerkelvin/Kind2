@@ -753,3 +753,18 @@ Term : Type
            (List.nil (Parser (Maybe ∀(x:Term)Term))))
 
   (Parser.grammar ∀(x:Term)Term xs)
+
+// Utils
+// =====
+
+(Utils.get_id term:Term) : Name
+  (Utils.get_id (Term.cts ctid args)) = ctid
+  (Utils.get_id term)                 = (Name.make "?")
+
+(Utils.var_get_name term:Term) : Name
+  (Utils.var_get_name (Term.var name)) = name
+  (Utils.var_get_name x) = (Name.make "_")
+
+(Utils.arg_get term:Term cont:∀(x:Name)∀(y:Term)Term) : Term
+  (Utils.arg_get (Term.ann var expr) cont) = (cont (Utils.var_get_name var) expr)
+  (Utils.arg_get term                cont) = (cont (Name.make "_") term)

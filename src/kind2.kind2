@@ -23,6 +23,14 @@
   (U32.read.go String.nil         r) = r
   (U32.read.go (String.cons x xs) r) = (U32.if U32 (& (<= '0' x) (<= x '9')) (U32.read.go xs (+ (* r 10) (- x '0'))) 0) 
 
+// TODO: parser error huh...
+(U32.show n:U32) : String
+  // (U32.show n) = (U32.show_build n String.nil)
+(U32.show_build n:U32 str:String) : String
+  // (U32.show_build n str) = 
+    // let next = (String.cons (+ 48 (% n 10)) str)
+    // ((U32.if String (< n 10) λx(x) λx(U32.show_build (/ n 10) x)) next)
+
 // Unit
 // ====
 
@@ -535,6 +543,7 @@ Term : Type
   (Term.typ)                                         : Term
   (Term.ann expr:Term type:Term)                     : Term
   (Term.hol hash:Name)                               : Term     
+  (Term.use name:Name numb:U32)                     : Term
   (Term.eql val0:Term val1:Term)                     : Term
   (Term.rwt name:Name witn:Term goal:Term expr:Term) : Term
 
@@ -760,10 +769,11 @@ KType : Type
   (KType.new lhs:Term rhs:Term) : KType
 
 Rule : Type 
-  (Rule.new lhs:Term rhs:Term) : Rule
+  (Rule.new lhs:Term rhs:Term list:Rule) : Rule
+  (Rule.end) : Rule
 
 Func : Type 
-  (Func.new type:(Pair Term Term) rules:(List Rule)) : Func
+  (Func.new lhs:Term rhs:Term rule:Rule) : Func
 
 File : Type 
   (File.new funcs:(Map Func)) : File
@@ -816,14 +826,120 @@ File : Type
 // Utils
 // =====
 
-(Utils.get_id term:Term) : Name
-  (Utils.get_id (Term.cts ctid args)) = ctid
-  (Utils.get_id term)                 = (Name.make "?")
+(Ctr.get_id term:Term) : Name
+  (Ctr.get_id (Term.cts ctid args)) = ctid
+  (Ctr.get_id term)                 = (Name.make "?")
 
-(Utils.var_get_name term:Term) : Name
-  (Utils.var_get_name (Term.var name)) = name
-  (Utils.var_get_name x) = (Name.make "_")
+(Var.get_name term:Term) : Name
+  (Var.get_name (Term.var name)) = name
+  (Var.get_name x) = (Name.make "_")
 
-(Utils.arg_get term:Term cont:∀(x:Name)∀(y:Term)Term) : Term
-  (Utils.arg_get (Term.ann var expr) cont) = (cont (Utils.var_get_name var) expr)
-  (Utils.arg_get term                cont) = (cont (Name.make "_") term)
+(Arg.get term:Term cont:∀(x:Name)∀(y:Term)Term) : Term
+  (Arg.get (Term.ann var expr) cont) = (cont (Var.get_name var) expr)
+  (Arg.get term                cont) = (cont (Name.make "_") term)
+
+
+// FIXME: this should be replaced by proper user of Maybe
+(Func.empty) : Func
+(Func.empty) = (Func.new (Term.var (Name.make "?")) (Term.var (Name.make "?")) Rule.end)
+
+(Func.set_type func:Func new_lty:Term new_rty:Term) : Func
+(Func.set_type (Func.new lty rty rules) new_lty new_rty) = (Func.new new_lty new_rty rules)
+
+(Func.add_rule func:Func lhs:Term rhs:Term) : Func
+(Func.add_rule (Func.new lty rty rules) lhs rhs) = (Func.new lty rty (Rule.new lhs rhs rules))
+
+(Func.get_name func:Func file:File) : String
+(Func.get_name (Func.new lty rty rules) file) = (Name.get_string (Ctr.get_id lty))
+
+(Func.get func:Func cont:∀(lhs:Term)∀(rhs:Term)∀(rules:Rule)Func) : Func
+  (Func.get (Func.new lty rty rules) cont) = (cont lty rty rules)
+
+(Func.get_rules func:Func) : Rule
+(Func.get_rules (Func.new lty rty rules)) = rules
+
+(File.make decls:(List Decl)) : File
+// (File.make decls) = (File.new (File.make.go decls (Map.empty Func)))
+
+(File.make.go list:(List Decl) file:(Map Func)) : File
+  (File.make.go (List.cons Decl (Decl.def_type lhs rhs) decls) file) =
+    let ctid = (Ctr.get_id lhs)
+    let func = (Func.new lhs rhs Rule.end)
+    (File.make.go decls (Map.set Func file (Name.get_hash ctid) func))
+
+  // FIXME: infer lambda
+  // (File.make.go (List.cons Decl (Decl.def_rule lhs rhs) decls) file) =
+  //   let ctid = (Ctr.get_id lhs)
+  //   let func = λfunc (Func.add_rule func (File.make.lhs lhs rhs) rhs)
+  //   (File.make.go decls (Map.mut Func file (Name.GetHash ctid) func))
+
+  (File.make.go (List.nil Decl) file) = (File.new file)
+
+// Builds the left-hand side of a rule, annotating variable usage counts.
+// TODO: use different constructor names
+// FIXME: is this really needed? benchmark without
+(File.make.lhs lhs:Term rhs:Term) : Term
+  (File.make.lhs (Term.var name)      rhs) = (Term.use name (Uses name rhs))
+  (File.make.lhs (Term.n32 numb)      rhs) = (Term.n32 numb)
+  (File.make.lhs (Term.cts ctid args) rhs) = (Term.cts ctid (File.make.lhs.many args rhs))
+  (File.make.lhs (Term.rfl expr)      rhs) = (Term.rfl (File.make.lhs expr rhs))
+  (File.make.lhs term                 rhs) = term
+
+(File.make.lhs.many lhs:(List Term) rhs:Term) : (List Term)
+  (File.make.lhs.many  (List.nil Term)       rhs) = (List.nil Term)
+  (File.make.lhs.many (List.cons Term x xs) rhs) = (List.cons Term (File.make.lhs x rhs) (File.make.lhs.many xs rhs))
+
+(File.get_funcs file:File) : (Map Func)
+  (File.get_funcs (File.new funs)) = funs
+
+// TODO: infer
+(File.got_func file:File ctid:U32) : (Pair File (Maybe Func))
+  // (File.got_func (File.new funs) ctid) =
+  //   (Pair.get (Map Func) (Maybe Func) _ (Map.get Func funs (Name.get_hash ctid)) λfuns λgot
+  //   (Pair.new File (Maybe Func) (File.new funs) got))
+
+// TODO: infer
+(File.is_ctr file:File ctid:U32) : U32
+// (File.is_ctr (File funs) ctid) =
+//   (Pair.get _ _ _ (Map.get Func funs (Name.get_hash ctid)) λfuns λgot
+//   (Maybe.case Func U32 got 1 λfunc(File.is_ctr.func func)))
+
+(File.is_ctr.func func:Func) : U32
+  (File.is_ctr.func (Func.new lty rty Rule.end))                 = 1
+  (File.is_ctr.func (Func.new lty rty (Rule.new lhs rhs rules))) = 0
+
+
+// Stringifying
+// ------------
+
+
+// Evaluation
+// ----------
+
+// Counts free occurrences of a name
+(Uses name:Name term:Term) : U32
+  (Uses nm (Term.var name))                = (Name.equal name nm)
+  (Uses nm (Term.use name numb))           = (Name.equal name nm)
+  (Uses nm (Term.hol hash))                = 0
+  (Uses nm Term.typ)                       = 0
+  (Uses nm Term.u32)                       = 0
+  (Uses nm (Term.n32 numb))                = 0
+  (Uses nm (Term.o32 oper val0 val1))      = (+ (Uses nm val0) (Uses nm val1))
+  (Uses nm (Term.gol name))                = 0
+  (Uses nm (Term.ann xval xtyp))           = (Uses nm xval)
+  (Uses nm (Term.let name expr body))      = (+ (Uses nm expr) (Uses.shadow (Name.equal nm name) nm body))
+  (Uses nm (Term.all name type body))      = (+ (Uses nm type) (Uses.shadow (Name.equal nm name) nm body))
+  (Uses nm (Term.lam name body))           = (Uses.shadow (Name.equal nm name) nm body)
+  (Uses nm (Term.app func argm))           = (+ (Uses nm func) (Uses nm argm))
+  (Uses nm (Term.cts ctid args))           = (Uses.many nm args)
+  (Uses nm (Term.eql val0 val1))           = (+ (Uses nm val0) (Uses nm val1))
+  (Uses nm (Term.rfl expr))                = (Uses nm expr)
+  (Uses nm (Term.rwt name witn goal expr)) = (+ (Uses nm witn) (+ (Uses.shadow (Name.equal nm name) nm goal) (Uses nm expr)))
+
+(Uses.many name:Name list:(List Term)) : U32
+  (Uses.many nm (List.nil Term))                = 0
+  (Uses.many nm (List.cons Term x xs))          = (+ (Uses nm x) (Uses.many nm xs))
+  
+(Uses.shadow cond:U32 name:Name body:Term) : U32
+  (Uses.shadow 0 nm body)             = (Uses nm body)
+  (Uses.shadow 1 nm body)             = 0
